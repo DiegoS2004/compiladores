@@ -1,0 +1,260 @@
+# patito_parser.py - parser Patito, TC3002B etapas 1-2
+
+import ply.yacc as yacc
+from patito_lexer import tokens  # noqa: F401
+from dir_funciones import dir_func, SemanticError
+
+_errors = []
+_quiet = False
+
+
+def set_quiet(value=True):
+    global _quiet
+    _quiet = value
+
+
+def get_errors():
+    return list(_errors)
+
+
+def clear_errors():
+    _errors.clear()
+
+
+def _sem_error(msg):
+    _errors.append(msg)
+    if not _quiet:
+        print(f"[Semantico] {msg}")
+
+
+def _sem_try(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except SemanticError as e:
+        _sem_error(str(e))
+        return None
+
+
+def _declarar_vars(nombres, tipo):
+    for nombre in nombres:
+        _sem_try(dir_func.nueva_variable, nombre, tipo)
+
+
+def _check_var_uso(nombre):
+    if dir_func.buscar_variable(nombre) is None:
+        _sem_error(f"Variable '{nombre}' no declarada")
+
+
+def _check_func_uso(nombre):
+    if dir_func.buscar_funcion(nombre) is None:
+        _sem_error(f"Funcion '{nombre}' no declarada")
+
+
+def p_programa(p):
+    'programa : programa_header vars funcs INICIO cuerpo FIN'
+
+
+def p_programa_header(p):
+    'programa_header : PROGRAMA ID SEMICOLON'
+    _sem_try(dir_func.inicio_programa, p[2])
+
+
+def p_vars(p):
+    '''vars : VARS vars_decl
+            | empty'''
+
+
+def p_vars_decl(p):
+    'vars_decl : ID vars_ids COLON tipo SEMICOLON vars_decl_prime'
+    _declarar_vars([p[1]] + p[2], p[4])
+
+
+def p_vars_ids(p):
+    '''vars_ids : COMMA ID vars_ids
+               | empty'''
+    if len(p) == 2:
+        p[0] = []
+    else:
+        p[0] = [p[2]] + p[3]
+
+
+def p_vars_decl_prime(p):
+    '''vars_decl_prime : ID vars_ids COLON tipo SEMICOLON vars_decl_prime
+                       | empty'''
+    if len(p) == 7:
+        _declarar_vars([p[1]] + p[2], p[4])
+
+
+def p_tipo(p):
+    '''tipo : ENTERO
+            | FLOTANTE'''
+    p[0] = 'entero' if p[1] == 'entero' else 'flotante'
+
+
+def p_funcs(p):
+    '''funcs : func funcs
+             | empty'''
+
+
+def p_func(p):
+    'func : func_header params RPAREN vars cuerpo func_footer'
+
+
+def p_func_header(p):
+    'func_header : tipo_func ID LPAREN'
+    _sem_try(dir_func.nueva_funcion, p[2], p[1])
+
+
+def p_func_footer(p):
+    'func_footer :'
+    _sem_try(dir_func.fin_funcion)
+
+
+def p_tipo_func(p):
+    '''tipo_func : NULA
+                | tipo'''
+    p[0] = 'nula' if p[1] == 'nula' else p[1]
+
+
+def p_params(p):
+    '''params : ID COLON tipo params_prime
+              | empty'''
+    if len(p) == 5:
+        _sem_try(dir_func.nuevo_param, p[1], p[3])
+
+
+def p_params_prime(p):
+    '''params_prime : COMMA ID COLON tipo params_prime
+                    | empty'''
+    if len(p) == 6:
+        _sem_try(dir_func.nuevo_param, p[2], p[4])
+
+
+def p_cuerpo(p):
+    'cuerpo : LBRACE estatutos RBRACE'
+
+
+def p_estatutos(p):
+    '''estatutos : estatuto estatutos
+                 | empty'''
+
+
+def p_estatuto(p):
+    '''estatuto : ID ASSIGN expresion SEMICOLON
+                | ID LPAREN llamada_prime RPAREN SEMICOLON
+                | condicion
+                | ciclo
+                | imprime'''
+    if len(p) == 5:
+        _check_var_uso(p[1])
+    elif len(p) == 6:
+        _check_func_uso(p[1])
+
+
+def p_condicion(p):
+    'condicion : SI LPAREN expresion RPAREN cuerpo condicion_prime'
+
+
+def p_condicion_prime(p):
+    '''condicion_prime : SINO cuerpo
+                       | empty'''
+
+
+def p_ciclo(p):
+    'ciclo : MIENTRAS LPAREN expresion RPAREN HAZ cuerpo SEMICOLON'
+
+
+def p_imprime(p):
+    'imprime : ESCRIBE LPAREN imprime_val imprime_prime RPAREN SEMICOLON'
+
+
+def p_imprime_val(p):
+    '''imprime_val : expresion
+                   | LETRERO'''
+
+
+def p_imprime_prime(p):
+    '''imprime_prime : COMMA imprime_val imprime_prime
+                     | empty'''
+
+
+def p_expresion(p):
+    'expresion : exp expresion_prime'
+
+
+def p_expresion_prime(p):
+    '''expresion_prime : GT exp
+                       | LT exp
+                       | NE exp
+                       | EQ exp
+                       | empty'''
+
+
+def p_exp(p):
+    'exp : termino exp_prime'
+
+
+def p_exp_prime(p):
+    '''exp_prime : PLUS termino exp_prime
+                 | MINUS termino exp_prime
+                 | empty'''
+
+
+def p_termino(p):
+    'termino : factor termino_prime'
+
+
+def p_termino_prime(p):
+    '''termino_prime : MULT factor termino_prime
+                     | DIV factor termino_prime
+                     | empty'''
+
+
+def p_factor(p):
+    '''factor : PLUS factor_prime
+              | MINUS factor_prime
+              | factor_prime'''
+
+
+def p_factor_prime_id(p):
+    'factor_prime : ID'
+    _check_var_uso(p[1])
+
+
+def p_factor_prime_paren(p):
+    'factor_prime : LPAREN expresion RPAREN'
+
+
+def p_factor_prime_cte(p):
+    'factor_prime : cte'
+
+
+def p_cte(p):
+    '''cte : CTE_ENT
+           | CTE_FLOT'''
+
+
+def p_llamada_prime(p):
+    '''llamada_prime : expresion llamada_double_prime
+                     | empty'''
+
+
+def p_llamada_double_prime(p):
+    '''llamada_double_prime : COMMA expresion llamada_double_prime
+                            | empty'''
+
+
+def p_empty(p):
+    'empty :'
+
+
+def p_error(p):
+    if p:
+        msg = f"Error sintactico: '{p.value}' inesperado (linea {p.lineno}, tipo {p.type})"
+    else:
+        msg = "Error sintactico: fin de archivo inesperado (programa incompleto)"
+    _errors.append(msg)
+    print(f"[Parser] {msg}")
+
+
+parser = yacc.yacc(write_tables=False, debug=False)
