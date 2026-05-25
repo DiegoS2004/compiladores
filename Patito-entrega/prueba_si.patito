@@ -1,0 +1,13 @@
+programa cond;
+vars
+  x : entero;
+inicio
+{
+  x = 0;
+  si (x == 0) {
+    x = 1;
+  } sino {
+    x = 2;
+  }
+}
+fin

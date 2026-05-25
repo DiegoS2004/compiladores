@@ -1,0 +1,11 @@
+programa loop;
+vars
+  i : entero;
+inicio
+{
+  i = 3;
+  mientras (i > 0) haz {
+    i = i - 1;
+  };
+}
+fin

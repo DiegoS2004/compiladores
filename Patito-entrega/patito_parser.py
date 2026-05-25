@@ -1,8 +1,9 @@
-# patito_parser.py - parser Patito, TC3002B etapas 1-2
+# patito_parser.py - parser Patito, TC3002B etapas 1-3
 
 import ply.yacc as yacc
 from patito_lexer import tokens  # noqa: F401
 from dir_funciones import dir_func, SemanticError
+from generador_cuadruplos import gen
 
 _errors = []
 _quiet = False
@@ -31,6 +32,14 @@ def _sem_try(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except SemanticError as e:
+        _sem_error(str(e))
+        return None
+
+
+def _gen_try(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except ValueError as e:
         _sem_error(str(e))
         return None
 
@@ -147,30 +156,63 @@ def p_estatuto(p):
                 | imprime'''
     if len(p) == 5:
         _check_var_uso(p[1])
+        info = dir_func.buscar_variable(p[1])
+        if info:
+            _gen_try(gen.asignar, p[1], info['tipo'])
     elif len(p) == 6:
         _check_func_uso(p[1])
 
 
 def p_condicion(p):
-    'condicion : SI LPAREN expresion RPAREN cuerpo condicion_prime'
+    'condicion : SI LPAREN expresion cond_paren_cierra cuerpo condicion_prime'
+
+
+def p_cond_paren_cierra(p):
+    'cond_paren_cierra : RPAREN'
+    _gen_try(gen.condicion_inicio)
 
 
 def p_condicion_prime(p):
-    '''condicion_prime : SINO cuerpo
+    '''condicion_prime : sino_mark cuerpo
                        | empty'''
+    if len(p) == 2:
+        _gen_try(gen.condicion_sin_sino)
+    else:
+        _gen_try(gen.condicion_sino_fin)
+
+
+def p_sino_mark(p):
+    'sino_mark : SINO'
+    _gen_try(gen.condicion_sino_inicio)
+
+
+def p_ciclo_mark(p):
+    'ciclo_mark : MIENTRAS LPAREN'
+    _gen_try(gen.ciclo_inicio)
+
+
+def p_ciclo_cond_fin(p):
+    'ciclo_cond_fin : RPAREN'
+    _gen_try(gen.ciclo_condicion)
 
 
 def p_ciclo(p):
-    'ciclo : MIENTRAS LPAREN expresion RPAREN HAZ cuerpo SEMICOLON'
+    'ciclo : ciclo_mark expresion ciclo_cond_fin HAZ cuerpo SEMICOLON'
+    _gen_try(gen.ciclo_fin)
 
 
 def p_imprime(p):
     'imprime : ESCRIBE LPAREN imprime_val imprime_prime RPAREN SEMICOLON'
 
 
-def p_imprime_val(p):
-    '''imprime_val : expresion
-                   | LETRERO'''
+def p_imprime_val_expr(p):
+    'imprime_val : expresion'
+    _gen_try(gen.imprimir_operando)
+
+
+def p_imprime_val_str(p):
+    'imprime_val : LETRERO'
+    _gen_try(gen.imprimir_letrero, p[1])
 
 
 def p_imprime_prime(p):
@@ -183,11 +225,30 @@ def p_expresion(p):
 
 
 def p_expresion_prime(p):
-    '''expresion_prime : GT exp
-                       | LT exp
-                       | NE exp
-                       | EQ exp
+    '''expresion_prime : op_rel exp
                        | empty'''
+    if len(p) == 3:
+        _gen_try(gen.procesar_relacional)
+
+
+def p_op_rel_gt(p):
+    'op_rel : GT'
+    _gen_try(gen.push_operador, '>')
+
+
+def p_op_rel_lt(p):
+    'op_rel : LT'
+    _gen_try(gen.push_operador, '<')
+
+
+def p_op_rel_ne(p):
+    'op_rel : NE'
+    _gen_try(gen.push_operador, '!=')
+
+
+def p_op_rel_eq(p):
+    'op_rel : EQ'
+    _gen_try(gen.push_operador, '==')
 
 
 def p_exp(p):
@@ -195,9 +256,21 @@ def p_exp(p):
 
 
 def p_exp_prime(p):
-    '''exp_prime : PLUS termino exp_prime
-                 | MINUS termino exp_prime
+    '''exp_prime : op_suma termino exp_prime
+                 | op_resta termino exp_prime
                  | empty'''
+    if len(p) > 1:
+        _gen_try(gen.procesar_aritmetico, 2)
+
+
+def p_op_suma(p):
+    'op_suma : PLUS'
+    _gen_try(gen.push_operador, '+')
+
+
+def p_op_resta(p):
+    'op_resta : MINUS'
+    _gen_try(gen.push_operador, '-')
 
 
 def p_termino(p):
@@ -205,24 +278,51 @@ def p_termino(p):
 
 
 def p_termino_prime(p):
-    '''termino_prime : MULT factor termino_prime
-                     | DIV factor termino_prime
+    '''termino_prime : op_mult factor termino_prime
+                     | op_div factor termino_prime
                      | empty'''
+    if len(p) > 1:
+        _gen_try(gen.procesar_aritmetico, 3)
+
+
+def p_op_mult(p):
+    'op_mult : MULT'
+    _gen_try(gen.push_operador, '*')
+
+
+def p_op_div(p):
+    'op_div : DIV'
+    _gen_try(gen.push_operador, '/')
 
 
 def p_factor(p):
-    '''factor : PLUS factor_prime
-              | MINUS factor_prime
+    '''factor : MINUS factor_prime
+              | PLUS factor_prime
               | factor_prime'''
+    if len(p) == 3 and p[1] == 'MINUS':
+        _gen_try(gen.aplicar_unario, 'uminus')
 
 
 def p_factor_prime_id(p):
     'factor_prime : ID'
     _check_var_uso(p[1])
+    info = dir_func.buscar_variable(p[1])
+    if info:
+        _gen_try(gen.push_operando, p[1], info['tipo'])
+
+
+def p_par_abre(p):
+    'par_abre : LPAREN'
+    _gen_try(gen.push_parentesis_abre)
+
+
+def p_par_cierra(p):
+    'par_cierra : RPAREN'
+    _gen_try(gen.push_parentesis_cierra)
 
 
 def p_factor_prime_paren(p):
-    'factor_prime : LPAREN expresion RPAREN'
+    'factor_prime : par_abre expresion par_cierra'
 
 
 def p_factor_prime_cte(p):
@@ -232,6 +332,10 @@ def p_factor_prime_cte(p):
 def p_cte(p):
     '''cte : CTE_ENT
            | CTE_FLOT'''
+    if p.slice[1].type == 'CTE_ENT':
+        _gen_try(gen.push_operando, p[1], 'entero')
+    else:
+        _gen_try(gen.push_operando, p[1], 'flotante')
 
 
 def p_llamada_prime(p):

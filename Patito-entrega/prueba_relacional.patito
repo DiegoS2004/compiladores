@@ -1,0 +1,12 @@
+programa rel;
+vars
+  a, b : entero;
+inicio
+{
+  a = 5;
+  b = 3;
+  si (a > b) {
+    a = 1;
+  }
+}
+fin
