@@ -1,8 +1,10 @@
-# generador_cuadruplos.py - Pilas de operadores/operandos/tipos y fila de cuadruplos
+# generador de cuadruplos
 
 from stack import Stack
 from queue import Queue
-from semantic_cube import check_type, ERROR
+from semantic_cube import check_type, ERROR, ENTERO, FLOTANTE
+from direcciones_virtuales import dv
+from dir_funciones import dir_func
 
 PREC_ARIT = {'*': 3, '/': 3, '+': 2, '-': 2}
 PREC_REL = {'>': 1, '<': 1, '!=': 1, '==': 1}
@@ -15,9 +17,9 @@ class GeneradorCuadruplos:
         self.tipos = Stack()
         self.cuadruplos = Queue()
         self.pila_saltos = Stack()
-        self._temp = 0
         self._contador = 0
         self._ciclo_inicio = None
+        self._params_llamada = 0
 
     def reset(self):
         self.operadores.clear()
@@ -25,13 +27,16 @@ class GeneradorCuadruplos:
         self.tipos.clear()
         self.cuadruplos.clear()
         self.pila_saltos.clear()
-        self._temp = 0
         self._contador = 0
         self._ciclo_inicio = None
+        self._params_llamada = 0
+
+    @property
+    def contador(self):
+        return self._contador
 
     def _nueva_temporal(self):
-        self._temp += 1
-        return f"t{self._temp}"
+        return dv.temporal_dir()
 
     def _agregar(self, operador, op1, op2, resultado):
         idx = self._contador
@@ -83,9 +88,13 @@ class GeneradorCuadruplos:
         if not self.operadores.is_empty():
             self.operadores.pop()
 
-    def push_operando(self, valor, tipo):
-        self.operandos.push(valor)
+    def push_operando(self, direccion, tipo):
+        self.operandos.push(direccion)
         self.tipos.push(tipo)
+
+    def push_constante(self, valor, tipo):
+        direccion = dv.constante_dir(valor, tipo)
+        self.push_operando(direccion, tipo)
 
     def procesar_aritmetico(self, limite):
         self._vaciar_operadores(limite)
@@ -115,7 +124,7 @@ class GeneradorCuadruplos:
             return True
         return tipo_var == FLOTANTE and tipo_val == ENTERO
 
-    def asignar(self, nombre_var, tipo_var):
+    def asignar(self, direccion_var, tipo_var):
         self.terminar_expresion()
         if self.operandos.is_empty():
             return
@@ -125,7 +134,7 @@ class GeneradorCuadruplos:
             raise ValueError(
                 f"asignacion invalida: {tipo_val} a variable tipo {tipo_var}"
             )
-        self._agregar('=', valor, None, nombre_var)
+        self._agregar('=', valor, None, direccion_var)
 
     def imprimir_operando(self):
         self.terminar_expresion()
@@ -187,6 +196,39 @@ class GeneradorCuadruplos:
             idx = self.pila_saltos.pop()
             self._rellenar(idx, self._contador)
         self._ciclo_inicio = None
+
+    def inicio_llamada(self):
+        self._params_llamada = 0
+
+    def parametro(self):
+        self.terminar_expresion()
+        if self.operandos.is_empty():
+            return
+        arg = self.operandos.pop()
+        self.tipos.pop()
+        self._agregar('PARAM', arg, None, None)
+        self._params_llamada += 1
+
+    def fin_llamada(self, nombre_func, num_esperados):
+        if self._params_llamada != num_esperados:
+            raise ValueError(
+                f"funcion '{nombre_func}' espera {num_esperados} "
+                f"parametros, recibio {self._params_llamada}"
+            )
+        func = dir_func.buscar_funcion(nombre_func)
+        if func is None:
+            raise ValueError(f"funcion '{nombre_func}' no declarada")
+        quad_inicio = func.get('quad_inicio')
+        if quad_inicio is None:
+            raise ValueError(
+                f"funcion '{nombre_func}' sin punto de entrada (quad_inicio)"
+            )
+        self._agregar('ERA', nombre_func, None, None)
+        self._agregar('GOSUB', None, None, quad_inicio)
+        self._params_llamada = 0
+
+    def endfunc(self):
+        self._agregar('ENDFUNC', None, None, None)
 
     def _rellenar(self, idx, destino):
         op, a1, a2, _ = self.cuadruplos.to_list()[idx]

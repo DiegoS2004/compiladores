@@ -1,4 +1,4 @@
-# patito_lexer.py - lexer Patito, TC3002B etapa 1
+# lexer Patito
 
 import ply.lex as lex
 
@@ -39,7 +39,7 @@ t_SEMICOLON = r';'
 t_COMMA     = r','
 t_COLON     = r':'
 
-# != y == antes que =
+# != y == van antes que =
 
 def t_NE(t):
     r'!='

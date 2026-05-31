@@ -1,0 +1,16 @@
+programa funcs;
+vars
+  x : entero;
+nula suma( a : entero, b : entero )
+vars
+  r : entero;
+{
+  r = a + b;
+  escribe("suma", r);
+}
+inicio
+{
+  x = 10;
+  suma(x, 5);
+}
+fin

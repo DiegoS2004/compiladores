@@ -1,4 +1,4 @@
-# queue.py - Fila FIFO para cuadruplos (etapa 3)
+# queue FIFO
 
 
 class Queue:

@@ -1,6 +1,6 @@
-# Patito — Entrega 3 (Generación de cuádruplos)
+# Patito — Entrega 4 (Direcciones virtuales, control y funciones)
 
-Compilador del lenguaje **Patito** (TC3002B): lexer, parser, análisis semántico (directorio de funciones + cubo semántico) y **generación de código intermedio en cuádruplos**.
+Compilador del lenguaje **Patito** (TC3002B): scanner, parser, semántica, **direcciones virtuales** y generación de cuádruplos para expresiones, estatutos de control y funciones.
 
 ## Requisitos
 
@@ -11,141 +11,209 @@ Compilador del lenguaje **Patito** (TC3002B): lexer, parser, análisis semántic
 
 ```bash
 cd Patito-entrega
-python3 patito.py hola.patito              # compilar
-python3 patito.py --quad hola.patito       # compilar + fila de cuádruplos
-python3 patito.py --dir hola.patito        # compilar + directorio de funciones
-python3 patito.py --test                   # pruebas sintácticas
-python3 patito.py --test-semantic          # pruebas semánticas (deben fallar)
-python3 patito.py --test-quad              # cuádruplos de programas de prueba
+python3 patito.py hola.patito
+python3 patito.py --quad hola.patito       # fila de cuádruplos
+python3 patito.py --dir hola.patito        # directorio de funciones + dir. virtuales
+python3 patito.py --dv hola.patito           # mapa de direcciones virtuales
+python3 patito.py --test-quad
 ```
 
-## Estructuras de la etapa 3
+## Distribución de direcciones virtuales
 
-### Pilas (LIFO) — `stack.py` + `generador_cuadruplos.py`
+Diseño en `direcciones_virtuales.py`:
+
+| Segmento   | Rango       | Uso |
+|------------|-------------|-----|
+| **Globales**   | 1000 – 1999 | Variables del bloque `vars` del programa principal |
+| **Locales**    | 2000 – 4999 | Parámetros y variables locales de funciones |
+| **Temporales** | 5000 – 7999 | Resultados intermedios de expresiones (`t` implícitos) |
+| **Constantes** | 8000 – 9999 | Tabla de constantes numéricas (misma cte → misma dir.) |
+
+Asignación:
+- Al declarar variable global → `global_dir()`
+- Al declarar parámetro o local en función → `local_dir()`
+- Al generar temporal → `temporal_dir()`
+- Al usar constante numérica → `constante_dir(valor, tipo)` con deduplicación
+
+Los cuádruplos almacenan **direcciones virtuales** (enteros), no nombres simbólicos.
+
+## Estructuras de generación
+
+### Pilas (LIFO)
 
 | Pila | Contenido | Uso |
 |------|-----------|-----|
-| **Operadores** | Símbolos `+`, `-`, `*`, `/`, `>`, `<`, `==`, `!=`, `(` | Orden de evaluación por precedencia; `(` marca subexpresiones |
-| **Operandos** | Nombres de variables, constantes, temporales `t1`, `t2`, … | Argumentos y resultados de cuádruplos |
-| **Tipos** | `entero` / `flotante` | Validación con el cubo semántico al generar cada operación |
-| **Saltos** (auxiliar) | Índices de cuádruplos incompletos | Rellenar destinos de `GOTOF` / `GOTO` en `si`/`sino` y `mientras` |
+| Operadores | `+`, `-`, `*`, `/`, relaciones, `(` | Precedencia y paréntesis |
+| Operandos | Direcciones virtuales | Argumentos de cuádruplos |
+| Tipos | `entero` / `flotante` | Cubo semántico |
+| Saltos | Índices de cuádruplos | Rellenar `GOTOF` / `GOTO` |
 
-### Fila (FIFO) — `queue.py`
+### Fila (FIFO)
 
-| Fila | Elemento | Formato |
-|------|----------|---------|
-| **Cuádruplos** | Tupla `(operador, operando1, operando2, resultado)` | Orden de ejecución futura; `_` = vacío en impresión |
+Cuádruplos `(operador, op1, op2, resultado)` en orden de emisión.
 
-Operadores de cuádruplo usados: `+`, `-`, `*`, `/`, `uminus`, `>`, `<`, `==`, `!=`, `=`, `PRINT`, `GOTOF`, `GOTO`.
+### Operadores de cuádruplo
 
-## Algoritmos implementados
+| Operador | Descripción |
+|----------|-------------|
+| `+`, `-`, `*`, `/`, `uminus` | Aritmética |
+| `>`, `<`, `==`, `!=` | Relacional |
+| `=` | Asignación |
+| `PRINT` | `escribe` |
+| `GOTOF`, `GOTO` | Condicionales y ciclos |
+| `PARAM` | Pasa argumento a función |
+| `ERA` | Crea registro de activación |
+| `GOSUB` | Salto a `quad_inicio` de la función |
+| `ENDFUNC` | Fin de función |
 
-1. **Expresiones aritméticas** (`exp`, `termino`, `factor`): al ver un operador se apila; al terminar el operando de la derecha se vacían operadores de mayor o igual precedencia y se emite un cuádruplo; temporales en `tN`.
-2. **Expresiones relacionales** (`expresion`): tras la parte aritmética izquierda, operador relacional y `exp` derecha → cuádruplo relacional.
-3. **Asignación** `id = expresion;`: vacía operadores, cuádruplo `(=, valor, _, id)`.
-4. **escribe** `(...)`: `(PRINT, operando, _, _)` por cada argumento.
-5. **si / sino**: `(GOTOF, cond, _, destino)`; con `sino`, `(GOTO, _, _, destino)` y relleno de índices.
-6. **mientras**: marca de inicio, `(GOTOF, cond, _, salida)`, cuerpo, `(GOTO, _, _, inicio)`.
+## Puntos neurálgicos
 
-## Programas de prueba
-
-| Archivo | Qué ejercita |
-|---------|----------------|
-| `hola.patito` | Asignación y `escribe` |
-| `prueba_aritmetica.patito` | Precedencia `*`/`+` y paréntesis |
-| `prueba_relacional.patito` | `si` con `>` |
-| `prueba_si.patito` | `si` / `sino` |
-| `prueba_mientras.patito` | Ciclo `mientras` |
-
-## Puntos neurálgicos (resumen)
-
-Reglas auxiliares (`op_suma`, `par_abre`, `cond_paren_cierra`, etc.) marcan el momento en que el parser reduce y se ejecuta la acción semántica de generación.
-
-### `exp` / `exp_prime` (suma y resta)
+### Expresiones aritméticas
 
 ```
 exp → termino exp_prime
 exp_prime → op_suma termino exp_prime | op_resta termino exp_prime | ε
+termino → factor termino_prime
+termino_prime → op_mult factor termino_prime | op_div factor termino_prime | ε
 ```
 
-- **● `op_suma` / `op_resta`**: apilar `+` o `-`.
-- **● Fin de `op_* termino`**: `procesar_aritmetico(2)` — genera `*`/`/` pendientes y luego `+`/`-` si aplica.
+| Punto | Acción |
+|-------|--------|
+| ● `op_suma` / `op_resta` | Apilar operador |
+| ● Tras `op_* termino` (exp) | `procesar_aritmetico(2)` |
+| ● `op_mult` / `op_div` | Apilar operador |
+| ● Tras `op_* factor` (term) | `procesar_aritmetico(3)` |
+| ● `ID` | Apilar `direccion` y tipo de la variable |
+| ● `cte` | Obtener dir. en tabla de constantes; apilar |
+| ● `par_abre` / `par_cierra` | Apilar `(` / generar hasta `(` |
+| ● `MINUS factor` | Cuádruplo `uminus` → temporal |
 
-### `termino` / `termino_prime` (mult y div)
+### Expresiones relacionales
 
-- **● `op_mult` / `op_div`**: apilar `*` o `/`.
-- **● Fin de `op_* factor`**: `procesar_aritmetico(3)`.
+```
+expresion → exp expresion_prime
+expresion_prime → op_rel exp | ε
+```
 
-### `factor` (unario y operandos)
+| Punto | Acción |
+|-------|--------|
+| ● `op_rel` | Apilar `>`, `<`, `==`, `!=` |
+| ● `op_rel exp` | `procesar_relacional()` → cuádruplo + temporal |
 
-- **● `factor_prime : ID`**: apilar variable y su tipo (tabla de símbolos).
-- **● `factor_prime : cte`**: apilar constante y tipo.
-- **● `par_abre` / `par_cierra`**: apilar `(`; al cerrar, generar hasta `(`.
-- **● `MINUS factor_prime`**: cuádruplo `uminus`.
-
-### `expresion` (relacional)
-
-- **● `op_rel`**: apilar `>`, `<`, `==`, `!=`.
-- **● `op_rel exp`**: `procesar_relacional()` — un cuádruplo relacional.
-
-### Estatutos
+### Estatutos lineales
 
 | Producción | Punto neurálgico | Acción |
-|------------|------------------|--------|
-| `ID = expresion ;` | Al reducir estatuto | `asignar(id)` |
-| `escribe(...)` | Cada `imprime_val` | `PRINT` |
-| `si ( exp )` | `cond_paren_cierra` | `GOTOF` (destino pendiente) |
-| `sino` | `sino_mark` | `GOTO` + rellenar `GOTOF` |
-| Fin `si` sin `sino` | `condicion_prime : ε` | Rellenar `GOTOF` |
-| Fin `si` con `sino` | Tras cuerpo del `sino` | Rellenar `GOTO` |
-| `mientras (` | `ciclo_mark` | Guardar índice de inicio |
-| `)` tras condición | `ciclo_cond_fin` | `GOTOF` |
-| Fin `mientras` | Reducir `ciclo` | `GOTO` inicio + rellenar `GOTOF` |
+|------------|----------------|--------|
+| `id = exp ;` | Reducir estatuto | `asignar(dir_var)` |
+| `escribe(exp)` | `imprime_val` | `PRINT` con dirección |
+| `escribe("...")` | `imprime_val : LETRERO` | `PRINT` con cadena |
 
-## Diagrama de gramática (expresión + estatuto lineal)
+### Condicionales (`si` / `sino`)
+
+```
+condicion → SI ( expresion ● ) cuerpo condicion_prime
+condicion_prime → SINO ● cuerpo | ε
+```
+
+| Punto | Acción |
+|-------|--------|
+| ● `)` tras condición (`cond_paren_cierra`) | `GOTOF(cond, pendiente)` |
+| ● `SINO` (`sino_mark`) | `GOTO` + rellenar `GOTOF` al `sino` |
+| ● Fin sin `sino` | Rellenar `GOTOF` al siguiente quad |
+| ● Fin con `sino` | Rellenar `GOTO` al final |
+
+### Ciclos (`mientras`)
+
+```
+ciclo → MIENTRAS ● ( expresion ● ) HAZ cuerpo ; ●
+```
+
+| Punto | Acción |
+|-------|--------|
+| ● `MIENTRAS (` (`ciclo_mark`) | Guardar índice de inicio del ciclo |
+| ● `)` tras condición | `GOTOF` con salida pendiente |
+| ● Fin del `mientras` | `GOTO` inicio + rellenar `GOTOF` |
+
+### Funciones
+
+```
+func → tipo id ( params ● ) vars { cuerpo } ●
+estatuto → id ● ( llamada_arg ● ... ) ;
+```
+
+| Punto | Acción |
+|-------|--------|
+| ● `func_header` | `nueva_funcion` en directorio |
+| ● `)` tras params (`func_params_fin`) | Guardar `quad_inicio = contador` |
+| ● Fin función (`func_footer`) | `ENDFUNC` + cerrar scope |
+| ● `call_id : ID` | Validar función; `inicio_llamada` |
+| ● Cada `llamada_arg : expresion` | Evaluar exp → `PARAM` |
+| ● `)` tras argumentos | `ERA`, `GOSUB(quad_inicio)` |
+
+## Diagramas de gramática
+
+### Expresiones y estatutos
 
 ```mermaid
 flowchart TB
   subgraph arit["Aritmética"]
     E[exp] --> T[termino]
     E --> EP[exp_prime]
-    EP -->|"+ termino"| EP
-    EP -->|"- termino"| EP
+    EP -->|"● op_suma termino"| EP
     T --> F[factor]
     T --> TP[termino_prime]
-    TP -->|"* factor"| TP
-    TP -->|"/ factor"| TP
-    F -->|ID ●| PUSH1[push operando/tipo]
-    F -->|cte ●| PUSH2[push operando/tipo]
-    F -->|"( exp )" ●| PAREN[par_abre / par_cierra]
+    TP -->|"● op_mult factor"| TP
+    F -->|"● ID"| PV[push dir/tipo]
+    F -->|"● cte"| PC[constante_dir]
+    F -->|"● ( exp )"| PR[par_abre / par_cierra]
   end
   subgraph rel["Relacional"]
     EX[expresion] --> E
     EX --> RP[expresion_prime]
-    RP -->|"op_rel exp ●"| REL[procesar_relacional]
+    RP -->|"● op_rel exp"| RL[procesar_relacional]
   end
-  subgraph est["Estatutos"]
-    ASG["ID = exp ; ●"] --> ASGN[= cuádruplo]
-    PR[escribe ●] --> PRT[PRINT]
-    SI[si ( exp ) ●] --> GF[GOTOF]
-    WH[mientras ●] --> LOOP[GOTOF / GOTO]
+  subgraph ctrl["Control"]
+    SI["si ( exp ) ●"] --> GF[GOTOF]
+    SN["sino ●"] --> GT[GOTO + fill]
+    WH["mientras ●"] --> LP[inicio + GOTOF/GOTO]
+  end
+  subgraph lin["Lineales"]
+    ASG["id = exp ●"] --> EQ["="]
+    PRN[escribe ●] --> OUT[PRINT]
   end
 ```
 
-(● = punto neurálgico en la reducción de esa regla.)
+### Funciones
 
-## Archivos del proyecto
+```mermaid
+flowchart LR
+  FH["func_header ●"] --> NF[nueva_funcion]
+  PF["params ) ●"] --> QI[quad_inicio]
+  CU[cuerpo] --> EF["func_footer ● ENDFUNC"]
+  CI["call_id ●"] --> IL[inicio_llamada]
+  LA["llamada_arg ●"] --> PM[PARAM]
+  FC[") fin llamada ●"] --> ER["ERA + GOSUB"]
+```
+
+## Programas de prueba
+
+| Archivo | Qué ejercita |
+|---------|----------------|
+| `hola.patito` | Asignación, `escribe`, dir. globales/constantes |
+| `prueba_aritmetica.patito` | Precedencia, temporales |
+| `prueba_relacional.patito` | `si` con `>` |
+| `prueba_si.patito` | `si` / `sino` con saltos |
+| `prueba_mientras.patito` | Ciclo con `GOTOF`/`GOTO` |
+| `prueba_funciones.patito` | Locales, `PARAM`, `ERA`, `GOSUB`, `ENDFUNC` |
+
+## Archivos
 
 | Archivo | Rol |
 |---------|-----|
-| `patito_lexer.py` | Tokens |
-| `patito_parser.py` | Gramática + acciones semánticas y neurálgicas |
-| `dir_funciones.py` | Directorio de funciones y variables |
-| `semantic_cube.py` | Cubo semántico |
-| `stack.py`, `queue.py` | Pilas y fila |
-| `generador_cuadruplos.py` | Algoritmos de traducción |
-| `patito.py` | Punto de entrada |
-
-## Etapas anteriores
-
-Las entregas 1–2 cubren scanner, parser y semántica de declaraciones; la etapa 3 añade código intermedio sin máquina virtual aún.
+| `direcciones_virtuales.py` | Mapa de memoria y tabla de constantes |
+| `dir_funciones.py` | Directorio + asignación de direcciones |
+| `generador_cuadruplos.py` | Pilas, fila, algoritmos |
+| `patito_parser.py` | Gramática y puntos neurálgicos |
+| `semantic_cube.py` | Validación de tipos |
+| `stack.py`, `queue.py` | Estructuras base |
+| `patito.py` | Entrada principal |

@@ -1,4 +1,4 @@
-# patito_parser.py - parser Patito, TC3002B etapas 1-3
+# parser Patito
 
 import ply.yacc as yacc
 from patito_lexer import tokens  # noqa: F401
@@ -106,7 +106,7 @@ def p_funcs(p):
 
 
 def p_func(p):
-    'func : func_header params RPAREN vars cuerpo func_footer'
+    'func : func_header params func_params_fin vars cuerpo func_footer'
 
 
 def p_func_header(p):
@@ -114,8 +114,14 @@ def p_func_header(p):
     _sem_try(dir_func.nueva_funcion, p[2], p[1])
 
 
+def p_func_params_fin(p):
+    'func_params_fin : RPAREN'
+    _sem_try(dir_func.marca_inicio_funcion, gen.contador)
+
+
 def p_func_footer(p):
     'func_footer :'
+    _gen_try(gen.endfunc)
     _sem_try(dir_func.fin_funcion)
 
 
@@ -150,17 +156,42 @@ def p_estatutos(p):
 
 def p_estatuto(p):
     '''estatuto : ID ASSIGN expresion SEMICOLON
-                | ID LPAREN llamada_prime RPAREN SEMICOLON
+                | call_id LPAREN llamada_args RPAREN SEMICOLON
                 | condicion
                 | ciclo
                 | imprime'''
-    if len(p) == 5:
+    if len(p) == 5 and p.slice[2].type == 'ASSIGN':
         _check_var_uso(p[1])
         info = dir_func.buscar_variable(p[1])
         if info:
-            _gen_try(gen.asignar, p[1], info['tipo'])
+            _gen_try(gen.asignar, info['direccion'], info['tipo'])
     elif len(p) == 6:
-        _check_func_uso(p[1])
+        nombre = p[1]
+        func = dir_func.buscar_funcion(nombre)
+        if func:
+            _gen_try(gen.fin_llamada, nombre, func['num_params'])
+
+
+def p_call_id(p):
+    'call_id : ID'
+    _check_func_uso(p[1])
+    p[0] = p[1]
+    _gen_try(gen.inicio_llamada)
+
+
+def p_llamada_args(p):
+    '''llamada_args : llamada_arg llamada_args_tail
+                    | empty'''
+
+
+def p_llamada_arg(p):
+    'llamada_arg : expresion'
+    _gen_try(gen.parametro)
+
+
+def p_llamada_args_tail(p):
+    '''llamada_args_tail : COMMA llamada_arg llamada_args_tail
+                         | empty'''
 
 
 def p_condicion(p):
@@ -308,7 +339,7 @@ def p_factor_prime_id(p):
     _check_var_uso(p[1])
     info = dir_func.buscar_variable(p[1])
     if info:
-        _gen_try(gen.push_operando, p[1], info['tipo'])
+        _gen_try(gen.push_operando, info['direccion'], info['tipo'])
 
 
 def p_par_abre(p):
@@ -333,19 +364,9 @@ def p_cte(p):
     '''cte : CTE_ENT
            | CTE_FLOT'''
     if p.slice[1].type == 'CTE_ENT':
-        _gen_try(gen.push_operando, p[1], 'entero')
+        _gen_try(gen.push_constante, p[1], 'entero')
     else:
-        _gen_try(gen.push_operando, p[1], 'flotante')
-
-
-def p_llamada_prime(p):
-    '''llamada_prime : expresion llamada_double_prime
-                     | empty'''
-
-
-def p_llamada_double_prime(p):
-    '''llamada_double_prime : COMMA expresion llamada_double_prime
-                            | empty'''
+        _gen_try(gen.push_constante, p[1], 'flotante')
 
 
 def p_empty(p):

@@ -2,7 +2,7 @@ ENTERO = 'entero'
 FLOTANTE = 'flotante'
 ERROR = 'error'
 
-# cube[tipo1][tipo2][operador] -> tipo_resultado
+# cubo[tipo1][tipo2][op] -> tipo resultado
 _cube = {
     ENTERO: {
         ENTERO: {

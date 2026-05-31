@@ -1,4 +1,4 @@
-# stack.py - Pila LIFO para operadores, operandos y tipos (etapa 3)
+# stack LIFO
 
 
 class Stack:

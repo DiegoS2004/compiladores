@@ -1,10 +1,11 @@
-# patito.py - entry point, TC3002B
+# main del compilador Patito
 
 import sys
 from patito_lexer import lexer, clear_lex_errors, get_lex_errors
 from patito_parser import parser, clear_errors, get_errors, set_quiet
 from dir_funciones import reset_dir, dir_func
 from generador_cuadruplos import gen, reset_gen
+from direcciones_virtuales import dv, reset_dv
 
 
 def compile_string(
@@ -12,12 +13,14 @@ def compile_string(
     label: str = "input",
     show_dir: bool = False,
     show_quad: bool = False,
+    show_dv: bool = False,
     quiet: bool = False,
 ) -> bool:
     clear_errors()
     clear_lex_errors()
     reset_dir()
     reset_gen()
+    reset_dv()
     set_quiet(quiet)
     lex_clone = lexer.clone()
     lex_clone.lineno = 1
@@ -36,10 +39,17 @@ def compile_string(
         dir_func.imprimir()
     if show_quad:
         gen.imprimir_cuadruplos()
+    if show_dv:
+        dv.imprimir_mapa()
     return True
 
 
-def compile_file(filepath: str, show_dir: bool = False, show_quad: bool = False) -> bool:
+def compile_file(
+    filepath: str,
+    show_dir: bool = False,
+    show_quad: bool = False,
+    show_dv: bool = False,
+) -> bool:
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             source = f.read()
@@ -48,7 +58,9 @@ def compile_file(filepath: str, show_dir: bool = False, show_quad: bool = False)
         return False
     print(f"\nCompilando: {filepath}")
     print("=" * 50)
-    return compile_string(source, filepath, show_dir=show_dir, show_quad=show_quad)
+    return compile_string(
+        source, filepath, show_dir=show_dir, show_quad=show_quad, show_dv=show_dv
+    )
 
 
 def lex_file(filepath: str) -> bool:
@@ -83,6 +95,7 @@ def run_quad_tests() -> bool:
         "prueba_relacional.patito",
         "prueba_si.patito",
         "prueba_mientras.patito",
+        "prueba_funciones.patito",
     ]
     import os
     base = os.path.dirname(os.path.abspath(__file__))
@@ -159,8 +172,9 @@ if __name__ == '__main__':
     if not argv:
         print("Uso:")
         print("  python patito.py <archivo.patito>")
-        print("  python patito.py --dir <archivo.patito>   # compila e imprime directorio")
-        print("  python patito.py --quad <archivo.patito>  # compila e imprime cuadruplos")
+        print("  python patito.py --dir <archivo.patito>")
+        print("  python patito.py --quad <archivo.patito>")
+        print("  python patito.py --dv <archivo.patito>")
         print("  python patito.py --test-quad")
         print("  python patito.py --test")
         print("  python patito.py --test-semantic")
@@ -187,5 +201,10 @@ if __name__ == '__main__':
             print("Uso: python patito.py --quad <archivo.patito>")
             sys.exit(1)
         sys.exit(0 if compile_file(argv[1], show_quad=True) else 1)
+    if argv[0] == '--dv':
+        if len(argv) < 2:
+            print("Uso: python patito.py --dv <archivo.patito>")
+            sys.exit(1)
+        sys.exit(0 if compile_file(argv[1], show_dv=True) else 1)
     ok = compile_file(argv[0])
     sys.exit(0 if ok else 1)

@@ -1,3 +1,6 @@
+from direcciones_virtuales import dv
+
+
 class SemanticError(Exception):
     pass
 
@@ -6,12 +9,12 @@ class TablaVariables:
     def __init__(self):
         self._tabla = {}
 
-    def agregar(self, nombre, tipo):
+    def agregar(self, nombre, tipo, direccion):
         if nombre in self._tabla:
             raise SemanticError(
                 f"Variable '{nombre}' ya fue declarada en este scope"
             )
-        self._tabla[nombre] = {'tipo': tipo}
+        self._tabla[nombre] = {'tipo': tipo, 'direccion': direccion}
 
     def buscar(self, nombre):
         return self._tabla.get(nombre)
@@ -25,7 +28,10 @@ class TablaVariables:
     def __repr__(self):
         if not self._tabla:
             return "      (vacia)"
-        lines = [f"      {n:<16} {v['tipo']}" for n, v in self._tabla.items()]
+        lines = [
+            f"      {n:<16} {v['tipo']:<10} dir={v['direccion']}"
+            for n, v in self._tabla.items()
+        ]
         return "\n".join(lines)
 
 
@@ -47,6 +53,7 @@ class DirectorioFunciones:
             'tipo': 'programa',
             'params': [],
             'num_params': 0,
+            'quad_inicio': None,
             'tabla_vars': TablaVariables(),
         }
         self._scope_stack.append('global')
@@ -60,6 +67,7 @@ class DirectorioFunciones:
             'tipo': tipo,
             'params': [],
             'num_params': 0,
+            'quad_inicio': None,
             'tabla_vars': TablaVariables(),
         }
         self._scope_stack.append(nombre)
@@ -69,14 +77,25 @@ class DirectorioFunciones:
             raise SemanticError("fin_funcion sin scope activo")
         self._scope_stack.pop()
 
+    def marca_inicio_funcion(self, quad_idx):
+        scope = self.scope_actual
+        if scope and scope != 'global' and scope in self._dir:
+            self._dir[scope]['quad_inicio'] = quad_idx
+
     def buscar_funcion(self, nombre):
         return self._dir.get(nombre)
+
+    def _asignar_direccion(self, tipo_scope):
+        if tipo_scope == 'global':
+            return dv.global_dir()
+        return dv.local_dir()
 
     def nueva_variable(self, nombre, tipo):
         scope = self.scope_actual
         if scope is None or scope not in self._dir:
             raise SemanticError("No hay scope activo")
-        self._dir[scope]['tabla_vars'].agregar(nombre, tipo)
+        direccion = self._asignar_direccion(scope)
+        self._dir[scope]['tabla_vars'].agregar(nombre, tipo, direccion)
 
     def nuevo_param(self, nombre, tipo):
         scope = self.scope_actual
@@ -108,7 +127,12 @@ class DirectorioFunciones:
             plist = ", ".join(
                 f"{p['nombre']}:{p['tipo']}" for p in fdata['params']
             ) or "--"
-            print(f"  [{fname}]  tipo={fdata['tipo']}  params=({plist})")
+            qini = fdata['quad_inicio']
+            qtxt = str(qini) if qini is not None else "--"
+            print(
+                f"  [{fname}]  tipo={fdata['tipo']}  "
+                f"params=({plist})  quad_inicio={qtxt}"
+            )
             print("    Variables:")
             print(fdata['tabla_vars'])
         print(sep)
