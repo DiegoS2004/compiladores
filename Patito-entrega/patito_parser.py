@@ -1,4 +1,5 @@
-# parser Patito
+# parser de patito
+# en cada punto neuralgico llama a dir_func o al generador de cuadruplos
 
 import ply.yacc as yacc
 from patito_lexer import tokens  # noqa: F401
@@ -60,7 +61,12 @@ def _check_func_uso(nombre):
 
 
 def p_programa(p):
-    'programa : programa_header vars funcs INICIO cuerpo FIN'
+    'programa : programa_header vars funcs inicio_main cuerpo FIN'
+
+
+def p_inicio_main(p):
+    'inicio_main : INICIO'
+    _sem_try(dir_func.marca_inicio_main, gen.contador)
 
 
 def p_programa_header(p):
@@ -116,6 +122,7 @@ def p_func_header(p):
 
 def p_func_params_fin(p):
     'func_params_fin : RPAREN'
+    # aqui empieza el codigo de la funcion
     _sem_try(dir_func.marca_inicio_funcion, gen.contador)
 
 

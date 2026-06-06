@@ -1,0 +1,15 @@
+programa demo_vm;
+vars
+  x, y : entero;
+nula mostrar( n : entero )
+{
+  escribe("resultado", n);
+}
+inicio
+{
+  x = 10;
+  y = 3;
+  x = x + y * 2;
+  mostrar(x);
+}
+fin

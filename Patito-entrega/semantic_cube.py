@@ -1,8 +1,9 @@
+# cubo semantico, valida tipos en operaciones
+
 ENTERO = 'entero'
 FLOTANTE = 'flotante'
 ERROR = 'error'
 
-# cubo[tipo1][tipo2][op] -> tipo resultado
 _cube = {
     ENTERO: {
         ENTERO: {

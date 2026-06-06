@@ -1,4 +1,4 @@
-# lexer Patito
+# lexer de patito, convierte el codigo fuente en tokens
 
 import ply.lex as lex
 

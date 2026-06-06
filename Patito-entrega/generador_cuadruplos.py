@@ -1,4 +1,5 @@
 # generador de cuadruplos
+# usa pilas para expresiones y una fila para guardar los cuadruplos
 
 from stack import Stack
 from queue import Queue
@@ -20,6 +21,7 @@ class GeneradorCuadruplos:
         self._contador = 0
         self._ciclo_inicio = None
         self._params_llamada = 0
+        self._tipos_llamada = []
 
     def reset(self):
         self.operadores.clear()
@@ -30,6 +32,7 @@ class GeneradorCuadruplos:
         self._contador = 0
         self._ciclo_inicio = None
         self._params_llamada = 0
+        self._tipos_llamada = []
 
     @property
     def contador(self):
@@ -124,6 +127,12 @@ class GeneradorCuadruplos:
             return True
         return tipo_var == FLOTANTE and tipo_val == ENTERO
 
+    @staticmethod
+    def _compatible_param(tipo_arg, tipo_param):
+        if tipo_arg == tipo_param:
+            return True
+        return tipo_param == FLOTANTE and tipo_arg == ENTERO
+
     def asignar(self, direccion_var, tipo_var):
         self.terminar_expresion()
         if self.operandos.is_empty():
@@ -199,17 +208,21 @@ class GeneradorCuadruplos:
 
     def inicio_llamada(self):
         self._params_llamada = 0
+        self._tipos_llamada = []
 
     def parametro(self):
+        # cada arg genera un PARAM con su direccion virtual
         self.terminar_expresion()
         if self.operandos.is_empty():
             return
         arg = self.operandos.pop()
-        self.tipos.pop()
+        tipo_arg = self.tipos.pop()
         self._agregar('PARAM', arg, None, None)
         self._params_llamada += 1
+        self._tipos_llamada.append(tipo_arg)
 
     def fin_llamada(self, nombre_func, num_esperados):
+        # valida args y emite ERA + GOSUB
         if self._params_llamada != num_esperados:
             raise ValueError(
                 f"funcion '{nombre_func}' espera {num_esperados} "
@@ -218,6 +231,15 @@ class GeneradorCuadruplos:
         func = dir_func.buscar_funcion(nombre_func)
         if func is None:
             raise ValueError(f"funcion '{nombre_func}' no declarada")
+
+        for i, tipo_arg in enumerate(self._tipos_llamada):
+            tipo_param = func['params'][i]['tipo']
+            if not self._compatible_param(tipo_arg, tipo_param):
+                raise ValueError(
+                    f"parametro {i + 1} de '{nombre_func}': "
+                    f"esperaba {tipo_param}, recibio {tipo_arg}"
+                )
+
         quad_inicio = func.get('quad_inicio')
         if quad_inicio is None:
             raise ValueError(
@@ -226,6 +248,7 @@ class GeneradorCuadruplos:
         self._agregar('ERA', nombre_func, None, None)
         self._agregar('GOSUB', None, None, quad_inicio)
         self._params_llamada = 0
+        self._tipos_llamada = []
 
     def endfunc(self):
         self._agregar('ENDFUNC', None, None, None)

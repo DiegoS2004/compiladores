@@ -1,4 +1,4 @@
-# stack LIFO
+# pila LIFO, usada en cuadruplos y en la VM
 
 
 class Stack:

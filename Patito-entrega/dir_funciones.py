@@ -1,3 +1,5 @@
+# directorio de funciones y tablas de variables
+
 from direcciones_virtuales import dv
 
 
@@ -6,8 +8,9 @@ class SemanticError(Exception):
 
 
 class TablaVariables:
+
     def __init__(self):
-        self._tabla = {}
+        self._tabla = {}  # nombre -> tipo y direccion
 
     def agregar(self, nombre, tipo, direccion):
         if nombre in self._tabla:
@@ -36,9 +39,10 @@ class TablaVariables:
 
 
 class DirectorioFunciones:
+
     def __init__(self):
         self._dir = {}
-        self._scope_stack = []
+        self._scope_stack = []  # scope actual: global o nombre de funcion
         self.nombre_programa = None
 
     @property
@@ -82,6 +86,10 @@ class DirectorioFunciones:
         if scope and scope != 'global' and scope in self._dir:
             self._dir[scope]['quad_inicio'] = quad_idx
 
+    def marca_inicio_main(self, quad_idx):
+        if 'global' in self._dir:
+            self._dir['global']['quad_inicio'] = quad_idx
+
     def buscar_funcion(self, nombre):
         return self._dir.get(nombre)
 
@@ -115,6 +123,26 @@ class DirectorioFunciones:
         if 'global' in self._dir:
             return self._dir['global']['tabla_vars'].buscar(nombre)
         return None
+
+    def direcciones_params(self, nombre_func):
+        func = self.buscar_funcion(nombre_func)
+        if func is None:
+            return []
+        addrs = []
+        for p in func['params']:
+            info = func['tabla_vars'].buscar(p['nombre'])
+            if info:
+                addrs.append(info['direccion'])
+        return addrs
+
+    def direcciones_locales(self, nombre_func):
+        func = self.buscar_funcion(nombre_func)
+        if func is None:
+            return []
+        return [
+            info['direccion']
+            for _, info in func['tabla_vars'].items()
+        ]
 
     def imprimir(self):
         sep = "-" * 52

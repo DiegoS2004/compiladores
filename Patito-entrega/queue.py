@@ -1,4 +1,4 @@
-# queue FIFO
+# fila FIFO, guarda la secuencia de cuadruplos
 
 
 class Queue:

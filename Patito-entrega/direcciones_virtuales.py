@@ -1,6 +1,5 @@
-# direcciones virtuales
+# direcciones virtuales, asigna un numero a cada variable y constante
 
-# rangos: globales, locales, temporales, constantes
 GLOB_INI = 1000
 GLOB_FIN = 1999
 LOCAL_INI = 2000
@@ -12,6 +11,7 @@ CONST_FIN = 9999
 
 
 class DireccionesVirtuales:
+
     def __init__(self):
         self._glob = GLOB_INI
         self._local = LOCAL_INI
