@@ -1,4 +1,14 @@
-# main del compilador patito, compila y puede ejecutar en la VM
+# =============================================================================
+# PATITO.PY — Punto de entrada del compilador
+# =============================================================================
+# Flujo general:
+#   1. Lexer  → convierte texto en tokens
+#   2. Parser → valida gramática + genera cuádruplos (código intermedio)
+#   3. VM     → ejecuta los cuádruplos usando direcciones virtuales
+#
+# Para la entrevista: este archivo NO hace la magia, solo junta todo.
+# La lógica real está en patito_parser.py (compilación) y maquina_virtual.py (ejecución).
+# =============================================================================
 
 import sys
 import io
@@ -19,14 +29,16 @@ def compile_string(
     show_dv: bool = False,
     quiet: bool = False,
 ) -> bool:
+    # Reiniciamos TODO antes de cada compilación (estado global compartido)
     clear_errors()
     clear_lex_errors()
-    reset_dir()
-    reset_gen()
-    reset_dv()
+    reset_dir()   # directorio de funciones y variables
+    reset_gen()   # generador de cuádruplos (pilas + fila)
+    reset_dv()    # contadores de direcciones virtuales
     set_quiet(quiet)
     lex_clone = lexer.clone()
     lex_clone.lineno = 1
+    # PLY parsea el source; el parser llama a gen/dir_func en cada punto neurálgico
     parser.parse(source, lexer=lex_clone)
     set_quiet(False)
     all_errors = get_lex_errors() + get_errors()
@@ -67,10 +79,12 @@ def compile_file(
 
 
 def run_vm(source: str, debug: bool = False) -> list:
+    """Compila en silencio y luego ejecuta en la Máquina Virtual."""
     if not compile_string(source, quiet=True):
         raise VMError("compilacion fallida, no se puede ejecutar")
     cuadruplos = gen.cuadruplos.to_list()
     vm = MaquinaVirtual(cuadruplos, dir_func, dv)
+    # El main empieza donde el parser marcó quad_inicio del scope 'global'
     main = dir_func.buscar_funcion('global')
     ip_inicio = main.get('quad_inicio') if main else 0
     if ip_inicio is None:
@@ -128,6 +142,7 @@ def lex_file(filepath: str) -> bool:
 
 
 def run_quad_tests() -> bool:
+    # Programas de demo para la entrevista (rúbrica: factorial + fibonacci main y en función)
     cases = [
         "hola.patito",
         "prueba_aritmetica.patito",
@@ -135,6 +150,9 @@ def run_quad_tests() -> bool:
         "prueba_si.patito",
         "prueba_mientras.patito",
         "prueba_funciones.patito",
+        "prueba_factorial.patito",
+        "prueba_fibonacci.patito",
+        "prueba_fibonacci_func.patito",
     ]
     import os
     base = os.path.dirname(os.path.abspath(__file__))

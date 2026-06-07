@@ -1,4 +1,16 @@
-# memoria de ejecucion, guarda valores usando direcciones virtuales
+# =============================================================================
+# MEMORIA_EJECUCION.PY — Mapa de memoria en tiempo de EJECUCIÓN
+# =============================================================================
+# La VM no usa nombres de variables; usa las direcciones virtuales del compilador.
+# Según el rango del número, cae en uno de 4 diccionarios:
+#
+#   _global     (1000-1999) → vars del programa, viven todo el run
+#   _local      (2000-4999) → params/locales de funciones; se respaldan en ERA
+#   _temporal   (5000-7999) → resultados de expresiones; se limpian al inicio
+#   _constantes (8000-9999) → solo lectura, cargadas del compilador
+#
+# Para la entrevista: dimensión G — explica cómo el número de dirección indexa memoria.
+# =============================================================================
 
 from direcciones_virtuales import (
     GLOB_INI, GLOB_FIN,
@@ -9,14 +21,14 @@ from direcciones_virtuales import (
 
 
 class MemoriaEjecucion:
-    # 4 segmentos: global, local, temporal, constante
+    # 4 segmentos = 4 diccionarios { direccion_virtual: valor }
 
     def __init__(self):
-        self._global = {}       # vars del programa
-        self._local = {}        # vars y params de funciones
-        self._temporal = {}     # resultados de expresiones
-        self._constantes = {}   # solo lectura
-        self._tipos = {}        # dir -> entero o flotante
+        self._global = {}       # vars del programa (persisten)
+        self._local = {}        # vars y params de funciones (se respaldan/restauran)
+        self._temporal = {}     # resultados de expresiones (temporales)
+        self._constantes = {}   # solo lectura — no se puede escribir aquí
+        self._tipos = {}        # dir → 'entero' o 'flotante' (para división entera vs float)
 
     @staticmethod
     def segmento(direccion):
@@ -69,11 +81,12 @@ class MemoriaEjecucion:
                 self.registrar_tipo(info['direccion'], info['tipo'])
 
     def respaldar_locales(self, direcciones):
-        # guarda valores antes de entrar a una funcion
+        # ERA: antes de entrar a una función, guardamos los valores locales actuales
+        # (por si la misma función se llama recursivamente o anidada)
         return {d: self._local[d] for d in direcciones if d in self._local}
 
     def restaurar_locales(self, respaldo, direcciones_funcion):
-        # restaura al salir de la funcion
+        # ENDFUNC: al salir, devolvemos la memoria local como estaba antes de la llamada
         for d in direcciones_funcion:
             if d in respaldo:
                 self._local[d] = respaldo[d]

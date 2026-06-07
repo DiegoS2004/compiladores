@@ -1,0 +1,18 @@
+programa fibonacci;
+vars
+  a, b, temp, i, n : entero;
+inicio
+{
+  n = 7;
+  a = 0;
+  b = 1;
+  i = 1;
+  mientras (i < n) haz {
+    temp = a + b;
+    a = b;
+    b = temp;
+    i = i + 1;
+  };
+  escribe("fibonacci 7 =", b);
+}
+fin

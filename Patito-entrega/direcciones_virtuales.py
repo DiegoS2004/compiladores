@@ -1,4 +1,17 @@
-# direcciones virtuales, asigna un numero a cada variable y constante
+# =============================================================================
+# DIRECCIONES_VIRTUALES.PY — Mapa de memoria en tiempo de COMPILACIÓN
+# =============================================================================
+# Cada variable, temporal y constante recibe un número entero único (dirección virtual).
+# La VM usa ese número para saber DÓNDE guardar/leer valores (sin buscar por nombre).
+#
+# Segmentos (rangos fijos):
+#   1000-1999 → globales (vars del programa)
+#   2000-4999 → locales (params + vars de funciones)
+#   5000-7999 → temporales (resultados de expresiones, ej. x+y)
+#   8000-9999 → constantes (5, 3.14, etc. — misma cte = misma dir)
+#
+# Para la entrevista: esto es la dimensión G de la rúbrica (estructuras de datos + mapa).
+# =============================================================================
 
 GLOB_INI = 1000
 GLOB_FIN = 1999
@@ -45,6 +58,7 @@ class DireccionesVirtuales:
         return d
 
     def constante_dir(self, valor, tipo):
+        # Si ya vimos el 5 antes, reutilizamos la misma dirección (no duplicamos)
         clave = (valor, tipo)
         if clave not in self._tabla_const:
             d, self._const = self._siguiente(self._const, CONST_FIN, "constante")

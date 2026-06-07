@@ -1,0 +1,21 @@
+programa fib_func;
+nula fib( n : entero )
+vars
+  a, b, temp, i : entero;
+{
+  a = 0;
+  b = 1;
+  i = 1;
+  mientras (i < n) haz {
+    temp = a + b;
+    a = b;
+    b = temp;
+    i = i + 1;
+  };
+  escribe("fib func", b);
+}
+inicio
+{
+  fib(7);
+}
+fin

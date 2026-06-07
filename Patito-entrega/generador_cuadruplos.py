@@ -1,5 +1,21 @@
-# generador de cuadruplos
-# usa pilas para expresiones y una fila para guardar los cuadruplos
+# =============================================================================
+# GENERADOR_CUADRUPLOS.PY — Corazón del compilador (código intermedio)
+# =============================================================================
+# Traduce expresiones y estatutos a cuádruplos usando el algoritmo de pilas:
+#
+#   Pilas:
+#     operadores  → +, -, *, /, >, <, etc. (con precedencia)
+#     operandos   → direcciones virtuales (1000, 5001, 8000...)
+#     tipos       → entero/flotante (para el cubo semántico)
+#
+#   Fila:
+#     cuadruplos  → secuencia final que ejecuta la VM
+#
+# Ejemplo: x = 1 + 2 * 3
+#   Genera: (*, 8001, 8002, 5000)  →  (+, 8000, 5000, 5001)  →  (=, 5001, _, 1000)
+#
+# Para la entrevista: dimensión A (expresiones), B (escribe), C (si/mientras).
+# =============================================================================
 
 from stack import Stack
 from queue import Queue
@@ -7,21 +23,23 @@ from semantic_cube import check_type, ERROR, ENTERO, FLOTANTE
 from direcciones_virtuales import dv
 from dir_funciones import dir_func
 
+# Precedencia: * / antes que + - ; relacionales al final
 PREC_ARIT = {'*': 3, '/': 3, '+': 2, '-': 2}
 PREC_REL = {'>': 1, '<': 1, '!=': 1, '==': 1}
 
 
 class GeneradorCuadruplos:
     def __init__(self):
+        # Pilas para evaluar expresiones (algoritmo clásico de compiladores)
         self.operadores = Stack()
         self.operandos = Stack()
         self.tipos = Stack()
-        self.cuadruplos = Queue()
-        self.pila_saltos = Stack()
-        self._contador = 0
-        self._ciclo_inicio = None
-        self._params_llamada = 0
-        self._tipos_llamada = []
+        self.cuadruplos = Queue()       # fila de código intermedio
+        self.pila_saltos = Stack()      # índices de GOTOF/GOTO pendientes de rellenar
+        self._contador = 0              # índice del siguiente cuádruplo
+        self._ciclo_inicio = None       # dónde empieza el mientras (para el GOTO al final)
+        self._params_llamada = 0          # cuántos args llevamos en una llamada
+        self._tipos_llamada = []          # tipos de esos args (validar con params)
 
     def reset(self):
         self.operadores.clear()
@@ -42,6 +60,7 @@ class GeneradorCuadruplos:
         return dv.temporal_dir()
 
     def _agregar(self, operador, op1, op2, resultado):
+        # Cada cuádruplo = (operador, arg1, arg2, resultado) — 4 campos fijos
         idx = self._contador
         self.cuadruplos.enqueue((operador, op1, op2, resultado))
         self._contador += 1
@@ -55,6 +74,7 @@ class GeneradorCuadruplos:
         return -1
 
     def _generar_cuadruplo(self):
+        # Saca operador y dos operandos, valida tipos con cubo semántico, genera cuádruplo
         op = self.operadores.pop()
         der = self.operandos.pop()
         izq = self.operandos.pop()
@@ -65,12 +85,14 @@ class GeneradorCuadruplos:
             raise ValueError(
                 f"operacion invalida: {tipo_izq} {op} {tipo_der}"
             )
-        temp = self._nueva_temporal()
+        temp = self._nueva_temporal()  # dirección 5000+ para el resultado
         self._agregar(op, izq, der, temp)
-        self.operandos.push(temp)
+        self.operandos.push(temp)       # el resultado vuelve a la pila de operandos
         self.tipos.push(res_tipo)
 
     def _vaciar_operadores(self, limite):
+        # Genera cuádruplos mientras haya ops con precedencia >= limite
+        # limite=2 para +-, limite=3 para */, limite=0 para relacionales
         while not self.operadores.is_empty():
             top = self.operadores.peek()
             if top == '(':
@@ -86,32 +108,39 @@ class GeneradorCuadruplos:
         self.operadores.push('(')
 
     def push_parentesis_cierra(self):
+        # Al cerrar "(", generamos todo lo que quedó adentro hasta el "("
         while not self.operadores.is_empty() and self.operadores.peek() != '(':
             self._generar_cuadruplo()
         if not self.operadores.is_empty():
-            self.operadores.pop()
+            self.operadores.pop()  # quitar el '('
 
     def push_operando(self, direccion, tipo):
+        # Variable: metemos su dirección virtual y tipo a las pilas
         self.operandos.push(direccion)
         self.tipos.push(tipo)
 
     def push_constante(self, valor, tipo):
+        # Constante: primero le pedimos dirección al mapa (8000+), luego push
         direccion = dv.constante_dir(valor, tipo)
         self.push_operando(direccion, tipo)
 
     def procesar_aritmetico(self, limite):
+        # Se llama al ver + - * / : vacía ops de mayor o igual precedencia
         self._vaciar_operadores(limite)
 
     def procesar_relacional(self):
+        # Relacionales van al final: vacía TODO y genera un cuádruplo (da 0 o 1)
         self._vaciar_operadores(0)
         if self.operadores.is_empty():
             return
         self._generar_cuadruplo()
 
     def terminar_expresion(self):
+        # Al terminar una expresión (asignación, condición, etc.) vacía lo que quede
         self._vaciar_operadores(0)
 
     def aplicar_unario(self, operador):
+        # Menos unario: -5 → cuádruplo (uminus, dir_5, _, temp)
         if self.operandos.is_empty():
             return
         op = self.operandos.pop()
@@ -134,6 +163,7 @@ class GeneradorCuadruplos:
         return tipo_param == FLOTANTE and tipo_arg == ENTERO
 
     def asignar(self, direccion_var, tipo_var):
+        # x = expr  →  (=, dir_resultado, _, dir_x)
         self.terminar_expresion()
         if self.operandos.is_empty():
             return
@@ -146,6 +176,7 @@ class GeneradorCuadruplos:
         self._agregar('=', valor, None, direccion_var)
 
     def imprimir_operando(self):
+        # escribe(expr)  →  (PRINT, dir_expr, _, _)
         self.terminar_expresion()
         if self.operandos.is_empty():
             return
@@ -154,39 +185,58 @@ class GeneradorCuadruplos:
         self._agregar('PRINT', op, None, None)
 
     def imprimir_letrero(self, texto):
+        # escribe("hola")  →  (PRINT, "hola", _, _)  — el texto va directo en arg1
         self._agregar('PRINT', texto, None, None)
 
+    # ----- SI / SINO (control de flujo con saltos) -----
+    # si (cond) { A } sino { B }:
+    #   GOTOF cond → salta al sino si cond es falsa
+    #   ... código A ...
+    #   GOTO → salta al final (saltarse B)
+    #   ... código B ...
+
     def condicion_inicio(self):
+        # Justo después de ")" del si: genera GOTOF con destino pendiente
         self.terminar_expresion()
         if self.operandos.is_empty():
             return
         cond = self.operandos.pop()
         self.tipos.pop()
-        idx = self._agregar('GOTOF', cond, None, None)
+        idx = self._agregar('GOTOF', cond, None, None)  # destino se rellena después
         self.pila_saltos.push(idx)
 
     def condicion_sin_sino(self):
+        # Si no hay sino: rellena el GOTOF para que apunte al final del bloque
         if self.pila_saltos.is_empty():
             return
         idx = self.pila_saltos.pop()
         self._rellenar(idx, self._contador)
 
     def condicion_sino_inicio(self):
+        # Al ver "sino": el GOTOF salta aquí; agregamos GOTO para brincar el sino
         if self.pila_saltos.is_empty():
             return
         idx_falso = self.pila_saltos.pop()
         idx_goto = self._agregar('GOTO', None, None, None)
-        self._rellenar(idx_falso, self._contador)
+        self._rellenar(idx_falso, self._contador)  # GOTOF ahora apunta al sino
         self.pila_saltos.push(idx_goto)
 
     def condicion_sino_fin(self):
+        # Fin del bloque sino: rellena el GOTO para saltar al final
         if self.pila_saltos.is_empty():
             return
         idx = self.pila_saltos.pop()
         self._rellenar(idx, self._contador)
 
+    # ----- MIENTRAS (ciclo) -----
+    # mientras (cond) haz { cuerpo }:
+    #   inicio ← aquí vuelve el GOTO del final
+    #   GOTOF cond → sale del ciclo si es falsa
+    #   ... cuerpo ...
+    #   GOTO inicio
+
     def ciclo_inicio(self):
-        self._ciclo_inicio = self._contador
+        self._ciclo_inicio = self._contador  # marcamos dónde empieza el ciclo
 
     def ciclo_condicion(self):
         self.terminar_expresion()
@@ -200,18 +250,22 @@ class GeneradorCuadruplos:
     def ciclo_fin(self):
         if self._ciclo_inicio is None:
             return
-        self._agregar('GOTO', None, None, self._ciclo_inicio)
+        self._agregar('GOTO', None, None, self._ciclo_inicio)  # regresa al inicio
         if not self.pila_saltos.is_empty():
             idx = self.pila_saltos.pop()
-            self._rellenar(idx, self._contador)
+            self._rellenar(idx, self._contador)  # GOTOF apunta aquí (salir del ciclo)
         self._ciclo_inicio = None
+
+    # ----- LLAMADAS A FUNCIONES -----
+    # suma(x, 5) genera:
+    #   PARAM dir_x, PARAM dir_5, ERA suma, GOSUB quad_inicio_suma
 
     def inicio_llamada(self):
         self._params_llamada = 0
         self._tipos_llamada = []
 
     def parametro(self):
-        # cada arg genera un PARAM con su direccion virtual
+        # Cada argumento → cuádruplo PARAM con su dirección
         self.terminar_expresion()
         if self.operandos.is_empty():
             return
@@ -222,7 +276,7 @@ class GeneradorCuadruplos:
         self._tipos_llamada.append(tipo_arg)
 
     def fin_llamada(self, nombre_func, num_esperados):
-        # valida args y emite ERA + GOSUB
+        # Valida cantidad y tipos de args, luego ERA + GOSUB
         if self._params_llamada != num_esperados:
             raise ValueError(
                 f"funcion '{nombre_func}' espera {num_esperados} "
@@ -251,9 +305,11 @@ class GeneradorCuadruplos:
         self._tipos_llamada = []
 
     def endfunc(self):
+        # Al terminar el cuerpo de una función
         self._agregar('ENDFUNC', None, None, None)
 
     def _rellenar(self, idx, destino):
+        # Los saltos (GOTOF/GOTO) se generan sin saber el destino; aquí lo ponemos
         op, a1, a2, _ = self.cuadruplos.to_list()[idx]
         nueva = list(self.cuadruplos.to_list())
         nueva[idx] = (op, a1, a2, destino)

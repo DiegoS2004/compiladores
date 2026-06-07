@@ -1,7 +1,15 @@
-# lexer de patito, convierte el codigo fuente en tokens
+# =============================================================================
+# PATITO_LEXER.PY — Análisis léxico (Scanner)
+# =============================================================================
+# Lee el .patito carácter por carácter y lo convierte en tokens.
+# Ejemplo: "x = 5;" → [ID('x'), ASSIGN, CTE_ENT(5), SEMICOLON]
+#
+# Usamos PLY (Python Lex-Yacc). Las reglas t_* definen qué patrón reconoce cada token.
+# =============================================================================
 
 import ply.lex as lex
 
+# Palabras reservadas del lenguaje Patito (no pueden usarse como nombres de variable)
 reserved = {
     'programa': 'PROGRAMA',
     'inicio':   'INICIO',
@@ -39,7 +47,8 @@ t_SEMICOLON = r';'
 t_COMMA     = r','
 t_COLON     = r':'
 
-# != y == van antes que =
+# IMPORTANTE: != y == deben ir ANTES que = en las reglas,
+# porque si no, el '=' de '==' se comería primero.
 
 def t_NE(t):
     r'!='
@@ -70,14 +79,16 @@ def t_LETRERO(t):
 
 def t_ID(t):
     r'[a-zA-Z_][a-zA-Z0-9_]*'
+    # Si es palabra reservada (programa, si, etc.) cambia el tipo; si no, es ID normal
     t.type = reserved.get(t.value, 'ID')
     return t
 
 def t_newline(t):
     r'\n+'
+    # Llevamos la cuenta de líneas para reportar errores con número de línea
     t.lexer.lineno += len(t.value)
 
-t_ignore = ' \t\r'
+t_ignore = ' \t\r'  # espacios y tabs se ignoran
 
 _lex_errors = []
 

@@ -1,4 +1,10 @@
-# pila LIFO, usada en cuadruplos y en la VM
+# =============================================================================
+# STACK.PY — Pila LIFO (Last In, First Out)
+# =============================================================================
+# Se usa en varios lugares:
+#   - generador_cuadruplos: pilas de operadores, operandos y tipos (expresiones)
+#   - maquina_virtual: pila de retorno (GOSUB) y respaldos de memoria (ERA)
+# =============================================================================
 
 
 class Stack:
