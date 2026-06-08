@@ -1,16 +1,4 @@
-# =============================================================================
-# DIR_FUNCIONES.PY — Tabla de símbolos (directorio de funciones)
-# =============================================================================
-# Guarda TODO lo que declara el programa:
-#   - Funciones (nombre, tipo, params, quad_inicio, tabla de vars)
-#   - Variables globales y locales
-#   - Scope actual (global vs dentro de una función)
-#
-# _scope_stack = pila de scopes. Al entrar a una función hacemos push,
-# al salir pop. Así sabemos si una var es global o local.
-#
-# Para la entrevista: dimensión D (contextos) y E (parametrización).
-# =============================================================================
+# directorio de funciones y tablas de variables
 
 from direcciones_virtuales import dv
 
@@ -20,7 +8,6 @@ class SemanticError(Exception):
 
 
 class TablaVariables:
-    """Variables de UN scope (global o de una función). nombre → {tipo, direccion}"""
 
     def __init__(self):
         self._tabla = {}  # nombre -> tipo y direccion
@@ -66,7 +53,6 @@ class DirectorioFunciones:
         if self._scope_stack:
             raise SemanticError("Programa ya iniciado")
         self.nombre_programa = nombre
-        # 'global' es el scope principal; el main también vive aquí
         self._dir['global'] = {
             'tipo': 'programa',
             'params': [],
@@ -96,13 +82,11 @@ class DirectorioFunciones:
         self._scope_stack.pop()
 
     def marca_inicio_funcion(self, quad_idx):
-        # Punto neurálgico: al cerrar ")" de params, guardamos dónde empieza el código
         scope = self.scope_actual
         if scope and scope != 'global' and scope in self._dir:
             self._dir[scope]['quad_inicio'] = quad_idx
 
     def marca_inicio_main(self, quad_idx):
-        # Igual pero para el bloque INICIO { ... } del programa
         if 'global' in self._dir:
             self._dir['global']['quad_inicio'] = quad_idx
 
@@ -122,7 +106,6 @@ class DirectorioFunciones:
         self._dir[scope]['tabla_vars'].agregar(nombre, tipo, direccion)
 
     def nuevo_param(self, nombre, tipo):
-        # Los params también son variables locales (reciben local_dir)
         scope = self.scope_actual
         if scope is None or scope == 'global':
             raise SemanticError("No hay funcion activa para agregar parametro")
@@ -132,7 +115,6 @@ class DirectorioFunciones:
         self.nueva_variable(nombre, tipo)
 
     def buscar_variable(self, nombre):
-        # Busca primero en scope actual, luego en global (variables globales visibles en funciones)
         scope = self.scope_actual
         if scope and scope in self._dir:
             v = self._dir[scope]['tabla_vars'].buscar(nombre)

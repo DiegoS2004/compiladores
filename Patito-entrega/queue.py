@@ -1,10 +1,4 @@
-# =============================================================================
-# QUEUE.PY — Fila FIFO (First In, First Out)
-# =============================================================================
-# Guarda la secuencia ordenada de cuádruplos que genera el compilador.
-# La VM los recorre uno por uno con un "IP" (instruction pointer).
-# Formato de cada cuádruplo: (operador, arg1, arg2, resultado)
-# =============================================================================
+# fila FIFO — secuencia de cuadruplos
 
 
 class Queue:
