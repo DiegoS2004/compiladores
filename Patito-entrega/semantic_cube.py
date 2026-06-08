@@ -4,6 +4,7 @@ ENTERO = 'entero'
 FLOTANTE = 'flotante'
 ERROR = 'error'
 
+# comparaciones siempre producen entero (0/1), aunque los operandos sean flotante
 _cube = {
     ENTERO: {
         ENTERO: {

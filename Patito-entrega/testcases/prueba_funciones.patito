@@ -1,0 +1,14 @@
+programa funcs;
+vars
+  x : entero;
+entero suma( a : entero, b : entero )
+{
+  retorna a + b;
+}
+inicio
+{
+  x = 10;
+  x = suma(x, 5);
+  escribe("suma", x);
+}
+fin

@@ -1,5 +1,5 @@
 programa fib_func;
-nula fib( n : entero )
+entero fib( n : entero )
 vars
   a, b, temp, i : entero;
 {
@@ -12,10 +12,10 @@ vars
     b = temp;
     i = i + 1;
   };
-  escribe("fib func", b);
+  retorna b;
 }
 inicio
 {
-  fib(7);
+  escribe("fib func", fib(7));
 }
 fin

@@ -1,7 +1,7 @@
 # generador de cuadruplos — pilas de expresiones + fila de codigo intermedio
 
-from stack import Stack
-from queue import Queue
+from estructura.stack import Stack
+from estructura.queue import Queue
 from semantic_cube import check_type, ERROR, ENTERO, FLOTANTE
 from direcciones_virtuales import dv
 from dir_funciones import dir_func
@@ -17,11 +17,12 @@ class GeneradorCuadruplos:
         self.operandos = Stack()
         self.tipos = Stack()
         self.cuadruplos = Queue()
-        self.pila_saltos = Stack()
+        self.pila_saltos = Stack()   # indices de cuadruplos GOTOF/GOTO por rellenar
         self._contador = 0
         self._ciclo_inicio = None
         self._params_llamada = 0
         self._tipos_llamada = []
+        self._pila_ctx = Stack()  # respaldo de pilas al evaluar args de llamada
 
     def reset(self):
         self.operadores.clear()
@@ -33,19 +34,37 @@ class GeneradorCuadruplos:
         self._ciclo_inicio = None
         self._params_llamada = 0
         self._tipos_llamada = []
+        self._pila_ctx.clear()
+
+    def _restaurar_ctx(self):
+        if self._pila_ctx.is_empty():
+            return
+        ops, tips, opers = self._pila_ctx.pop()
+        self.operandos.clear()
+        self.tipos.clear()
+        self.operadores.clear()
+        for x in ops:
+            self.operandos.push(x)
+        for x in tips:
+            self.tipos.push(x)
+        for x in opers:
+            self.operadores.push(x)
 
     @property
     def contador(self):
         return self._contador
 
     def _nueva_temporal(self):
+        # dentro de funcion: temporales en locales para que ERA los respalde
+        if dir_func.scope_actual and dir_func.scope_actual != 'global':
+            return dv.local_dir()
         return dv.temporal_dir()
 
     def _agregar(self, operador, op1, op2, resultado):
         idx = self._contador
         self.cuadruplos.enqueue((operador, op1, op2, resultado))
         self._contador += 1
-        return idx
+        return idx  # los saltos guardan este indice para patch despues
 
     def _precedencia(self, op):
         if op in PREC_ARIT:
@@ -56,7 +75,7 @@ class GeneradorCuadruplos:
 
     def _generar_cuadruplo(self):
         op = self.operadores.pop()
-        der = self.operandos.pop()
+        der = self.operandos.pop()   # el ultimo en entrar es el operando derecho
         izq = self.operandos.pop()
         tipo_der = self.tipos.pop()
         tipo_izq = self.tipos.pop()
@@ -71,6 +90,7 @@ class GeneradorCuadruplos:
         self.tipos.push(res_tipo)
 
     def _vaciar_operadores(self, limite):
+        # limite 3=*//, 2=+-, 0=relacionales (vacia todo lo aritmetico)
         while not self.operadores.is_empty():
             top = self.operadores.peek()
             if top == '(':
@@ -125,6 +145,7 @@ class GeneradorCuadruplos:
     def _compatible_asignacion(tipo_val, tipo_var):
         if tipo_val == tipo_var:
             return True
+        # entero cabe en flotante, al reves no
         return tipo_var == FLOTANTE and tipo_val == ENTERO
 
     @staticmethod
@@ -175,8 +196,8 @@ class GeneradorCuadruplos:
         if self.pila_saltos.is_empty():
             return
         idx_falso = self.pila_saltos.pop()
-        idx_goto = self._agregar('GOTO', None, None, None)
-        self._rellenar(idx_falso, self._contador)
+        idx_goto = self._agregar('GOTO', None, None, None)  # brinca el sino al terminar el then
+        self._rellenar(idx_falso, self._contador)             # GOTOF ahora cae aqui
         self.pila_saltos.push(idx_goto)
 
     def condicion_sino_fin(self):
@@ -186,6 +207,7 @@ class GeneradorCuadruplos:
         self._rellenar(idx, self._contador)
 
     def ciclo_inicio(self):
+        # se marca antes de evaluar la condicion (el GOTO del final regresa aqui)
         self._ciclo_inicio = self._contador
 
     def ciclo_condicion(self):
@@ -209,6 +231,15 @@ class GeneradorCuadruplos:
     def inicio_llamada(self):
         self._params_llamada = 0
         self._tipos_llamada = []
+        # no mezclar args de la llamada con la expresion que la contiene
+        self._pila_ctx.push((
+            self.operandos.to_list(),
+            self.tipos.to_list(),
+            self.operadores.to_list(),
+        ))
+        self.operandos.clear()
+        self.tipos.clear()
+        self.operadores.clear()
 
     def parametro(self):
         self.terminar_expresion()
@@ -220,7 +251,7 @@ class GeneradorCuadruplos:
         self._params_llamada += 1
         self._tipos_llamada.append(tipo_arg)
 
-    def fin_llamada(self, nombre_func, num_esperados):
+    def fin_llamada(self, nombre_func, num_esperados, como_expresion=False):
         if self._params_llamada != num_esperados:
             raise ValueError(
                 f"funcion '{nombre_func}' espera {num_esperados} "
@@ -243,16 +274,47 @@ class GeneradorCuadruplos:
             raise ValueError(
                 f"funcion '{nombre_func}' sin punto de entrada (quad_inicio)"
             )
+
+        tipo_ret = func.get('tipo', 'nula')
+        if como_expresion and tipo_ret == 'nula':
+            raise ValueError(
+                f"funcion '{nombre_func}' es nula, no puede usarse en expresion"
+            )
+
         self._agregar('ERA', nombre_func, None, None)
         self._agregar('GOSUB', None, None, quad_inicio)
+
+        self._restaurar_ctx()
+
+        if tipo_ret != 'nula':
+            if como_expresion:
+                temp = self._nueva_temporal()
+                self._agregar('RETORNO', None, None, temp)
+                self.operandos.push(temp)
+                self.tipos.push(tipo_ret)
+            else:
+                self._agregar('POPRET', None, None, None)
+
         self._params_llamada = 0
         self._tipos_llamada = []
+
+    def retorna(self, tipo_esperado):
+        self.terminar_expresion()
+        if self.operandos.is_empty():
+            return
+        valor = self.operandos.pop()
+        tipo_val = self.tipos.pop()
+        if not self._compatible_asignacion(tipo_val, tipo_esperado):
+            raise ValueError(
+                f"retorna tipo invalido: {tipo_val}, esperaba {tipo_esperado}"
+            )
+        self._agregar('RETURN', valor, None, None)
 
     def endfunc(self):
         self._agregar('ENDFUNC', None, None, None)
 
     def _rellenar(self, idx, destino):
-        # GOTOF/GOTO se generan sin destino; aqui se completa
+        # al generar GOTOF/GOTO aun no sabemos el destino; se patcha al cerrar el bloque
         op, a1, a2, _ = self.cuadruplos.to_list()[idx]
         nueva = list(self.cuadruplos.to_list())
         nueva[idx] = (op, a1, a2, destino)

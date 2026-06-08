@@ -15,6 +15,7 @@ reserved = {
     'haz':      'HAZ',
     'escribe':  'ESCRIBE',
     'nula':     'NULA',
+    'retorna':  'RETORNA',
 }
 
 tokens = list(reserved.values()) + [
@@ -39,7 +40,7 @@ t_SEMICOLON = r';'
 t_COMMA     = r','
 t_COLON     = r':'
 
-# != y == van antes que =
+# != y == van antes que = (si no, == se parte en = =)
 
 def t_NE(t):
     r'!='
@@ -52,6 +53,8 @@ def t_EQ(t):
 def t_ASSIGN(t):
     r'='
     return t
+
+# flotante antes que entero (si no, 3.14 se lee como 3)
 
 def t_CTE_FLOT(t):
     r'\d+\.\d+'

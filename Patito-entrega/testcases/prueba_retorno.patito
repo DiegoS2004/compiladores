@@ -1,0 +1,13 @@
+programa retorno;
+vars
+  x : entero;
+entero suma( a : entero, b : entero )
+{
+  retorna a + b;
+}
+inicio
+{
+  x = suma(3, 4);
+  escribe("suma con retorno = ", x);
+}
+fin

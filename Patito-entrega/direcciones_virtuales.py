@@ -50,7 +50,7 @@ class DireccionesVirtuales:
         if clave not in self._tabla_const:
             d, self._const = self._siguiente(self._const, CONST_FIN, "constante")
             self._tabla_const[clave] = d
-        return self._tabla_const[clave]
+        return self._tabla_const[clave]  # misma cte reutiliza direccion
 
     def imprimir_mapa(self):
         sep = "-" * 52

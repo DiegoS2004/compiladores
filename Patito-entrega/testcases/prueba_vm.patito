@@ -1,15 +1,15 @@
 programa demo_vm;
 vars
   x, y : entero;
-nula mostrar( n : entero )
+entero doble( n : entero )
 {
-  escribe("resultado", n);
+  retorna n;
 }
 inicio
 {
   x = 10;
   y = 3;
   x = x + y * 2;
-  mostrar(x);
+  escribe("resultado", doble(x));
 }
 fin

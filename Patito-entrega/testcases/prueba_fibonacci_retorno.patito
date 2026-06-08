@@ -1,0 +1,17 @@
+programa fib_ret;
+vars
+  x : entero;
+entero fib( n : entero )
+{
+  si (n < 2) {
+    retorna n;
+  } sino {
+    retorna fib(n - 1) + fib(n - 2);
+  }
+}
+inicio
+{
+  x = fib(7);
+  escribe("fib recursivo con retorno 7 =", x);
+}
+fin

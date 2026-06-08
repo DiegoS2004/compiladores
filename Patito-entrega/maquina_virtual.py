@@ -1,6 +1,6 @@
-# maquina virtual — ejecuta la fila de cuadruplos
+# maquina virtual — ejecuta cuadruplos con registros de activacion (RA)
 
-from stack import Stack
+from estructura.stack import Stack
 from memoria_ejecucion import MemoriaEjecucion
 
 
@@ -15,9 +15,9 @@ class MaquinaVirtual:
         self.dir_func = dir_func
         self.dv = dv
         self.mem = MemoriaEjecucion()
-        self.pila_retorno = Stack()
+        self.pila_retorno = Stack()          # direcciones de retorno (GOSUB)
+        self.pila_retorno_valores = Stack()  # valores de funciones con retorno
         self.parametros = []
-        self.respaldos = Stack()
         self.salida = []
 
     def _leer(self, direccion):
@@ -67,32 +67,26 @@ class MaquinaVirtual:
             raise VMError(f"funcion '{nombre_func}' no encontrada en ERA")
 
         dir_params = self.dir_func.direcciones_params(nombre_func)
-        dir_locales = self.dir_func.direcciones_locales(nombre_func)
-
-        respaldo = self.mem.respaldar_locales(dir_locales)
-        self.respaldos.push((respaldo, dir_locales))
-
         if len(self.parametros) != len(dir_params):
             raise VMError(
                 f"ERA '{nombre_func}': esperaba {len(dir_params)} params, "
                 f"recibio {len(self.parametros)}"
             )
-        for param_dir, arg_dir in zip(dir_params, self.parametros):
-            self._escribir(param_dir, self._leer(arg_dir))
+
+        # leer args del RA activo (caller) antes de crear el nuevo RA
+        valores = [self._leer(arg) for arg in self.parametros]
         self.parametros.clear()
 
-    def _endfunc(self):
-        if self.respaldos.is_empty():
-            raise VMError("ENDFUNC sin registro de activacion activo")
-        respaldo, dir_locales = self.respaldos.pop()
-        self.mem.restaurar_locales(respaldo, dir_locales)
+        params = list(zip(dir_params, valores))
+        self.mem.entrar_funcion(nombre_func, params)
 
+    def _endfunc(self):
+        self.mem.salir_funcion()
         if self.pila_retorno.is_empty():
             raise VMError("ENDFUNC sin direccion de retorno en pila")
         return self.pila_retorno.pop()
 
     def _inicializar_memoria(self):
-        # Antes de ejecutar: cargar constantes, tipos de variables, tipos de temporales
         self.mem.cargar_constantes(self.dv._tabla_const)
         self.mem.cargar_tipos_desde_directorio(self.dir_func)
         for i in range(len(self.cuadruplos)):
@@ -113,8 +107,9 @@ class MaquinaVirtual:
     def ejecutar(self, ip_inicio=0, debug=False):
         self.salida.clear()
         self.pila_retorno.clear()
+        self.pila_retorno_valores.clear()
         self.parametros.clear()
-        self.respaldos.clear()
+        self.mem.limpiar_ra()
         self.mem.limpiar_temporales()
         self._inicializar_memoria()
 
@@ -125,7 +120,9 @@ class MaquinaVirtual:
             op, a1, a2, res = self.cuadruplos[ip]
 
             if debug:
-                print(f"  IP={ip:4}  ({op}, {a1}, {a2}, {res})")
+                ra = self.mem.ra_actual
+                ra_txt = ra.nombre if ra else "global"
+                print(f"  IP={ip:4}  ({op}, {a1}, {a2}, {res})  RA={ra_txt}")
 
             if op == '=':
                 self._escribir(res, self._leer(a1))
@@ -158,6 +155,18 @@ class MaquinaVirtual:
                 self.pila_retorno.push(ip + 1)
                 ip = res
                 continue
+            elif op == 'RETURN':
+                self.pila_retorno_valores.push(self._leer(a1))
+                ip = self._endfunc()
+                continue
+            elif op == 'RETORNO':
+                if self.pila_retorno_valores.is_empty():
+                    raise VMError("RETORNO sin valor en pila de retorno")
+                self._escribir(res, self.pila_retorno_valores.pop())
+            elif op == 'POPRET':
+                if self.pila_retorno_valores.is_empty():
+                    raise VMError("POPRET sin valor de retorno en pila")
+                self.pila_retorno_valores.pop()
             elif op == 'ENDFUNC':
                 ip = self._endfunc()
                 continue

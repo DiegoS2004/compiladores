@@ -112,7 +112,7 @@ class DirectorioFunciones:
         func = self._dir[scope]
         func['params'].append({'nombre': nombre, 'tipo': tipo})
         func['num_params'] += 1
-        self.nueva_variable(nombre, tipo)
+        self.nueva_variable(nombre, tipo)  # param = var local con direccion propia
 
     def buscar_variable(self, nombre):
         scope = self.scope_actual
@@ -120,6 +120,7 @@ class DirectorioFunciones:
             v = self._dir[scope]['tabla_vars'].buscar(nombre)
             if v:
                 return v
+        # fallback: globals visibles dentro de funciones
         if 'global' in self._dir:
             return self._dir['global']['tabla_vars'].buscar(nombre)
         return None

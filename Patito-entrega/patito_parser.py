@@ -1,9 +1,10 @@
 # parser de patito — gramatica + acciones semanticas (puntos neuralgicos)
 
 import ply.yacc as yacc
-from patito_lexer import tokens  # noqa: F401
-from dir_funciones import dir_func, SemanticError
-from generador_cuadruplos import gen
+from patito_lexer import tokens, lexer, clear_lex_errors, get_lex_errors  # noqa: F401
+from dir_funciones import dir_func, SemanticError, reset_dir
+from generador_cuadruplos import gen, reset_gen
+from direcciones_virtuales import reset_dv
 
 _errors = []
 _quiet = False
@@ -29,6 +30,7 @@ def _sem_error(msg):
 
 
 def _sem_try(fn, *args, **kwargs):
+    # acumula error semantico sin abortar el parse (sigue reportando mas)
     try:
         return fn(*args, **kwargs)
     except SemanticError as e:
@@ -121,6 +123,7 @@ def p_func_header(p):
 
 def p_func_params_fin(p):
     'func_params_fin : RPAREN'
+    # primer cuadruplo ejecutable de la funcion (vars locales no generan codigo)
     _sem_try(dir_func.marca_inicio_funcion, gen.contador)
 
 
@@ -162,26 +165,40 @@ def p_estatutos(p):
 def p_estatuto(p):
     '''estatuto : ID ASSIGN expresion SEMICOLON
                 | call_id LPAREN llamada_args RPAREN SEMICOLON
+                | RETORNA expresion SEMICOLON
                 | condicion
                 | ciclo
                 | imprime'''
     if len(p) == 5 and p.slice[2].type == 'ASSIGN':
+        # asignacion: ID ASSIGN expresion SEMICOLON
         _check_var_uso(p[1])
         info = dir_func.buscar_variable(p[1])
         if info:
             _gen_try(gen.asignar, info['direccion'], info['tipo'])
     elif len(p) == 6:
+        # llamada como estatuto: call_id ya corrio inicio_llamada
         nombre = p[1]
         func = dir_func.buscar_funcion(nombre)
         if func:
             _gen_try(gen.fin_llamada, nombre, func['num_params'])
+    elif len(p) == 4 and p.slice[1].type == 'RETORNA':
+        scope = dir_func.scope_actual
+        if scope is None or scope == 'global':
+            _sem_error("retorna solo permitido dentro de funciones")
+        else:
+            func = dir_func.buscar_funcion(scope)
+            if func:
+                if func['tipo'] == 'nula':
+                    _sem_error("funcion nula no puede usar retorna")
+                else:
+                    _gen_try(gen.retorna, func['tipo'])
 
 
 def p_call_id(p):
     'call_id : ID'
     _check_func_uso(p[1])
     p[0] = p[1]
-    _gen_try(gen.inicio_llamada)
+    _gen_try(gen.inicio_llamada)  # regla aparte para resetear antes de los args
 
 
 def p_llamada_args(p):
@@ -296,7 +313,7 @@ def p_exp_prime(p):
                  | op_resta termino exp_prime
                  | empty'''
     if len(p) > 1:
-        _gen_try(gen.procesar_aritmetico, 2)
+        _gen_try(gen.procesar_aritmetico, 2)  # limite 2 = solo vacia + y -
 
 
 def p_op_suma(p):
@@ -318,7 +335,7 @@ def p_termino_prime(p):
                      | op_div factor termino_prime
                      | empty'''
     if len(p) > 1:
-        _gen_try(gen.procesar_aritmetico, 3)
+        _gen_try(gen.procesar_aritmetico, 3)  # limite 3 = vacia * y / pendientes
 
 
 def p_op_mult(p):
@@ -347,9 +364,23 @@ def p_factor_prime_id(p):
         _gen_try(gen.push_operando, info['direccion'], info['tipo'])
 
 
+def p_factor_call_head(p):
+    'factor_call_head : ID LPAREN'
+    _check_func_uso(p[1])
+    _gen_try(gen.inicio_llamada)
+    p[0] = p[1]
+
+
+def p_factor_prime_call(p):
+    'factor_prime : factor_call_head llamada_args RPAREN'
+    func = dir_func.buscar_funcion(p[1])
+    if func:
+        _gen_try(gen.fin_llamada, p[1], func['num_params'], True)
+
+
 def p_par_abre(p):
     'par_abre : LPAREN'
-    _gen_try(gen.push_parentesis_abre)
+    _gen_try(gen.push_parentesis_abre)  # regla propia para marcar antes de parsear adentro
 
 
 def p_par_cierra(p):
@@ -388,3 +419,20 @@ def p_error(p):
 
 
 parser = yacc.yacc(write_tables=False, debug=False)
+
+
+def compilar_fuente(source: str) -> list:
+    """Tokeniza y parsea el programa. Retorna errores (lista vacía = OK)."""
+    clear_errors()
+    clear_lex_errors()
+    reset_dir()
+    reset_gen()
+    reset_dv()
+
+    set_quiet(True)
+    lex = lexer.clone()
+    lex.lineno = 1
+    parser.parse(source, lexer=lex)
+    set_quiet(False)
+
+    return get_lex_errors() + get_errors()

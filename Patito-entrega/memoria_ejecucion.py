@@ -1,4 +1,4 @@
-# memoria de ejecucion — 4 segmentos indexados por direccion virtual
+# memoria de ejecucion — globales, constantes, temporales y registros de activacion
 
 from direcciones_virtuales import (
     GLOB_INI, GLOB_FIN,
@@ -6,20 +6,40 @@ from direcciones_virtuales import (
     TEMP_INI, TEMP_FIN,
     CONST_INI, CONST_FIN,
 )
+from estructura.stack import Stack
+
+
+class ActivationRecord:
+    """Registro de activacion (RA): memoria local de una invocacion de funcion."""
+
+    def __init__(self, nombre_func):
+        self.nombre = nombre_func
+        self.locales = {}  # direccion virtual -> valor
+
+    def leer(self, direccion):
+        return self.locales.get(direccion, 0)
+
+    def escribir(self, direccion, valor):
+        self.locales[direccion] = valor
 
 
 class MemoriaEjecucion:
 
     def __init__(self):
         self._global = {}
-        self._local = {}
         self._temporal = {}
         self._constantes = {}
         self._tipos = {}
+        self._pila_ra = Stack()  # pila de registros de activacion
+
+    @property
+    def ra_actual(self):
+        if self._pila_ra.is_empty():
+            return None
+        return self._pila_ra.peek()
 
     @staticmethod
     def segmento(direccion):
-        # dice en que segmento cae una direccion
         if GLOB_INI <= direccion <= GLOB_FIN:
             return 'global'
         if LOCAL_INI <= direccion <= LOCAL_FIN:
@@ -30,26 +50,34 @@ class MemoriaEjecucion:
             return 'constante'
         raise ValueError(f"direccion fuera de rango: {direccion}")
 
-    def _tabla(self, direccion):
+    def _tabla_fija(self, direccion):
         seg = self.segmento(direccion)
         if seg == 'global':
             return self._global
-        if seg == 'local':
-            return self._local
         if seg == 'temporal':
             return self._temporal
         return self._constantes
 
     def leer(self, direccion):
-        tabla = self._tabla(direccion)
-        return tabla.get(direccion, 0)
+        if self.segmento(direccion) == 'local':
+            ra = self.ra_actual
+            if ra is None:
+                return 0
+            return ra.leer(direccion)
+        return self._tabla_fija(direccion).get(direccion, 0)
 
     def escribir(self, direccion, valor):
         if self.segmento(direccion) == 'constante':
             raise ValueError(
                 f"no se puede escribir en constante (dir {direccion})"
             )
-        self._tabla(direccion)[direccion] = valor
+        if self.segmento(direccion) == 'local':
+            ra = self.ra_actual
+            if ra is None:
+                raise ValueError(f"escritura local sin RA activo (dir {direccion})")
+            ra.escribir(direccion, valor)
+            return
+        self._tabla_fija(direccion)[direccion] = valor
 
     def tipo_de(self, direccion):
         return self._tipos.get(direccion, 'entero')
@@ -67,18 +95,24 @@ class MemoriaEjecucion:
             for _nombre, info in fdata['tabla_vars'].items():
                 self.registrar_tipo(info['direccion'], info['tipo'])
 
-    def respaldar_locales(self, direcciones):
-        return {d: self._local[d] for d in direcciones if d in self._local}
+    def entrar_funcion(self, nombre_func, params):
+        """ERA: crea un RA nuevo y carga parametros."""
+        ra = ActivationRecord(nombre_func)
+        for direccion, valor in params:
+            ra.escribir(direccion, valor)
+        self._pila_ra.push(ra)
 
-    def restaurar_locales(self, respaldo, direcciones_funcion):
-        for d in direcciones_funcion:
-            if d in respaldo:
-                self._local[d] = respaldo[d]
-            elif d in self._local:
-                del self._local[d]
+    def salir_funcion(self):
+        """ENDFUNC / RETURN: destruye el RA activo."""
+        if self._pila_ra.is_empty():
+            raise ValueError("salir_funcion sin RA activo")
+        self._pila_ra.pop()
 
     def limpiar_temporales(self):
         self._temporal.clear()
+
+    def limpiar_ra(self):
+        self._pila_ra.clear()
 
     def imprimir_estado(self):
         sep = "-" * 52
@@ -87,7 +121,6 @@ class MemoriaEjecucion:
         print(sep)
         for nombre, tabla in [
             ("Globales", self._global),
-            ("Locales", self._local),
             ("Temporales", self._temporal),
             ("Constantes", self._constantes),
         ]:
@@ -96,4 +129,11 @@ class MemoriaEjecucion:
                 for d in sorted(tabla):
                     t = self._tipos.get(d, '?')
                     print(f"      {d:<6}  {tabla[d]!r}  ({t})")
+        if not self._pila_ra.is_empty():
+            print("  Registros de activacion (pila):")
+            for i, ra in enumerate(self._pila_ra.to_list()):
+                print(f"    [{i}] {ra.nombre}:")
+                for d in sorted(ra.locales):
+                    t = self._tipos.get(d, '?')
+                    print(f"        {d:<6}  {ra.locales[d]!r}  ({t})")
         print(sep)
