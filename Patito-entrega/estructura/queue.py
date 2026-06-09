@@ -1,4 +1,5 @@
-# fila FIFO — secuencia de cuadruplos
+# Fila FIFO donde generador_cuadruplos guarda los cuadruplos en orden de generacion.
+# La VM los convierte a lista y los recorre con el puntero de instruccion (IP).
 
 
 class Queue:

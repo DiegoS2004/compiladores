@@ -1,7 +1,16 @@
-# lexer de patito — convierte codigo fuente en tokens (PLY)
+# =============================================================================
+# FASE 1 — LEXER (analisis lexico)
+# =============================================================================
+# Convierte el texto del .patito en una secuencia de tokens.
+# Ejemplo:  "x = 1 + 2;"  →  ID(x) ASSIGN CTE_ENT(1) PLUS CTE_ENT(2) SEMICOLON
+#
+# El parser (patito_parser.py) consume esos tokens; el lexer no valida tipos ni
+# genera cuadruplos, solo reconoce palabras, numeros, operadores y simbolos.
+# =============================================================================
 
 import ply.lex as lex
 
+# Palabras reservadas del lenguaje → tipo de token en mayusculas
 reserved = {
     'programa': 'PROGRAMA',
     'inicio':   'INICIO',
@@ -18,6 +27,7 @@ reserved = {
     'retorna':  'RETORNA',
 }
 
+# Lista completa de tipos de token que PLY puede devolver
 tokens = list(reserved.values()) + [
     'ID', 'CTE_ENT', 'CTE_FLOT', 'LETRERO',
     'PLUS', 'MINUS', 'MULT', 'DIV',
@@ -82,7 +92,7 @@ def t_newline(t):
 
 t_ignore = ' \t\r'
 
-_lex_errors = []
+_lex_errors = []  # caracteres ilegales encontrados durante el tokenizado
 
 def get_lex_errors():
     return list(_lex_errors)
@@ -96,4 +106,5 @@ def t_error(t):
     print(f"[Lexico] {msg}")
     t.lexer.skip(1)
 
+# Instancia global del lexer; patito_parser hace lexer.clone() por compilacion
 lexer = lex.lex()

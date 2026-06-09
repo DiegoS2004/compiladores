@@ -1,4 +1,13 @@
-# cubo semantico — valida tipos en operaciones (tipo1, tipo2, op) -> tipo_resultado
+# =============================================================================
+# CUBO SEMANTICO
+# =============================================================================
+# Dado dos tipos y un operador, dice si la operacion es valida y que tipo resulta.
+# Lo usa generador_cuadruplos al crear cuadruplos de expresiones (+, *, ==, etc.)
+#
+#   check_type('entero', 'entero', '+')  →  'entero'
+#   check_type('entero', 'flotante', '+') →  'flotante'
+#   combinacion invalida                  →  'error'
+# =============================================================================
 
 ENTERO = 'entero'
 FLOTANTE = 'flotante'

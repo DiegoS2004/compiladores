@@ -1,4 +1,18 @@
-# memoria de ejecucion — globales, constantes, temporales y registros de activacion
+# =============================================================================
+# MEMORIA DE EJECUCION
+# =============================================================================
+# Almacena valores en tiempo de ejecucion, indexados por direccion virtual.
+#
+# Segmentos fijos (fuera de funciones):
+#   _global     → vars del programa (1000+)
+#   _temporal   → temps del main (5000+)
+#   _constantes → literales (8000+, solo lectura)
+#
+# Segmento local (dentro de funciones):
+#   ActivationRecord en _pila_ra → params, locales y temps de cada invocacion
+#
+# La VM decide donde leer/escribir segun el rango del entero (ver segmento()).
+# =============================================================================
 
 from direcciones_virtuales import (
     GLOB_INI, GLOB_FIN,
@@ -24,6 +38,7 @@ class ActivationRecord:
 
 
 class MemoriaEjecucion:
+    """Memoria runtime del programa Patito."""
 
     def __init__(self):
         self._global = {}
@@ -59,6 +74,7 @@ class MemoriaEjecucion:
         return self._constantes
 
     def leer(self, direccion):
+        """Lee valor; direcciones locales van al RA activo (tope de pila_ra)."""
         if self.segmento(direccion) == 'local':
             ra = self.ra_actual
             if ra is None:
@@ -91,7 +107,7 @@ class MemoriaEjecucion:
             self._tipos[direccion] = tipo
 
     def cargar_tipos_desde_directorio(self, dir_func):
-        for _fname, fdata in dir_func._dir.items():
+        for _fname, fdata in dir_func._funciones.items():
             for _nombre, info in fdata['tabla_vars'].items():
                 self.registrar_tipo(info['direccion'], info['tipo'])
 

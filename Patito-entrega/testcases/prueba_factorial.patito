@@ -9,6 +9,6 @@ inicio
     resultado = resultado * n;
     n = n - 1;
   };
-  escribe("factorial 5 =", resultado);
+  escribe("factorial 5 = ", resultado);
 }
 fin

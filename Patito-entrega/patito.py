@@ -1,13 +1,18 @@
-# Patito — punto de entrada del compilador
+# =============================================================================
+# PATITO — PUNTO DE ENTRADA
+# =============================================================================
+# Orquesta las 3 fases del compilador:
 #
-# Flujo completo:
-#   1. Lexer   (patito_lexer)      → convierte texto en tokens
-#   2. Parser  (patito_parser)     → valida semántica y genera cuádruplos
-#   3. VM      (maquina_virtual)    → ejecuta los cuádruplos
+#   1. Lexer   (patito_lexer)     → texto a tokens
+#   2. Parser  (patito_parser)    → tokens a cuadruplos + tablas
+#   3. VM      (maquina_virtual)   → ejecuta cuadruplos
 #
 # Uso:
 #   python patito.py --run hola.patito
-#   (si no encuentra el archivo en el cwd, lo busca en testcases/)
+#   python patito.py --run prueba_funciones.patito
+#
+# Si el .patito no esta en el directorio actual, busca en testcases/
+# =============================================================================
 
 import os
 import sys
@@ -57,7 +62,7 @@ def ejecutar(source: str):
 
     # El bloque 'inicio' no siempre es el cuádruplo 0:
     # las funciones declaradas arriba generan cuádruplos primero
-    main = dir_func.buscar_funcion('global')
+    main = dir_func.obtener_funcion('global')
     ip_inicio = main.get('quad_inicio', 0) if main else 0
 
     return vm.ejecutar(ip_inicio=ip_inicio)

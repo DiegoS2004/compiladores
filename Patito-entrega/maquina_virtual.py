@@ -1,4 +1,14 @@
-# maquina virtual — ejecuta cuadruplos con registros de activacion (RA)
+# =============================================================================
+# FASE 3 — MAQUINA VIRTUAL (ejecucion)
+# =============================================================================
+# Interpreta la fila de cuadruplos generada en compilacion.
+# Usa MemoriaEjecucion para leer/escribir por direccion virtual y pilas para:
+#   - pila_retorno         → IP a donde regresar despues de GOSUB
+#   - pila_retorno_valores → valor devuelto por RETURN (consumido por RETORNO)
+#   - parametros[]         → args pendientes entre PARAM y ERA
+#
+# Ciclo: leer cuadruplo en IP → ejecutar → IP++ (o saltar con GOTO/GOTOF/GOSUB)
+# =============================================================================
 
 from estructura.stack import Stack
 from memoria_ejecucion import MemoriaEjecucion
@@ -9,6 +19,7 @@ class VMError(Exception):
 
 
 class MaquinaVirtual:
+    """Ejecutor del codigo intermedio de Patito."""
 
     def __init__(self, cuadruplos, dir_func, dv):
         self.cuadruplos = cuadruplos
@@ -62,11 +73,12 @@ class MaquinaVirtual:
             raise VMError(f"operador desconocido: {op}")
 
     def _era(self, nombre_func):
-        func = self.dir_func.buscar_funcion(nombre_func)
+        """Cuadruplo ERA: crea registro de activacion y copia params al RA."""
+        func = self.dir_func.obtener_funcion(nombre_func)
         if func is None:
             raise VMError(f"funcion '{nombre_func}' no encontrada en ERA")
 
-        dir_params = self.dir_func.direcciones_params(nombre_func)
+        dir_params = self.dir_func.dirs_parametros_de(nombre_func)
         if len(self.parametros) != len(dir_params):
             raise VMError(
                 f"ERA '{nombre_func}': esperaba {len(dir_params)} params, "
@@ -81,6 +93,7 @@ class MaquinaVirtual:
         self.mem.entrar_funcion(nombre_func, params)
 
     def _endfunc(self):
+        """Cuadruplo ENDFUNC/RETURN: destruye RA y devuelve IP de retorno."""
         self.mem.salir_funcion()
         if self.pila_retorno.is_empty():
             raise VMError("ENDFUNC sin direccion de retorno en pila")
@@ -105,6 +118,11 @@ class MaquinaVirtual:
                     self.mem.registrar_tipo(res, self.mem.tipo_de(a1))
 
     def ejecutar(self, ip_inicio=0, debug=False):
+        """
+        Corre el programa desde el cuadruplo ip_inicio (bloque inicio del main).
+        patito.py pasa dir_func['global']['quad_inicio'] porque las funciones
+        declaradas arriba generan cuadruplos antes del main.
+        """
         self.salida.clear()
         self.pila_retorno.clear()
         self.pila_retorno_valores.clear()
@@ -124,6 +142,7 @@ class MaquinaVirtual:
                 ra_txt = ra.nombre if ra else "global"
                 print(f"  IP={ip:4}  ({op}, {a1}, {a2}, {res})  RA={ra_txt}")
 
+            # --- Aritmetica, asignacion e impresion ---
             if op == '=':
                 self._escribir(res, self._leer(a1))
 
@@ -139,6 +158,7 @@ class MaquinaVirtual:
                     self.salida.append(val)
                     print(val, end='')
 
+            # --- Saltos condicionales (si / mientras) ---
             elif op == 'GOTOF':
                 if not self._es_verdadero(self._leer(a1)):
                     ip = res
@@ -147,6 +167,7 @@ class MaquinaVirtual:
                 ip = res
                 continue
 
+            # --- Llamadas a funcion ---
             elif op == 'PARAM':
                 self.parametros.append(a1)
             elif op == 'ERA':

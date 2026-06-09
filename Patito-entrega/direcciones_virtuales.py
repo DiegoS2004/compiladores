@@ -1,5 +1,15 @@
-# direcciones virtuales — asigna un entero a cada var, temporal y constante
-# rangos: global 1000+, local 2000+, temporal 5000+, constante 8000+
+# =============================================================================
+# DIRECCIONES VIRTUALES
+# =============================================================================
+# Cada variable, temporal y constante recibe un entero unico (direccion virtual).
+# Los cuadruplos guardan esos enteros, no nombres. La VM usa el rango del entero
+# para saber en que segmento de memoria leer/escribir.
+#
+#   x : entero   →  1000        (global)
+#   a : entero   →  2001        (local de funcion)
+#   1 + 2        →  temp 5000   (resultado intermedio)
+#   literal 5    →  8001        (constante)
+# =============================================================================
 
 GLOB_INI = 1000
 GLOB_FIN = 1999
@@ -12,6 +22,7 @@ CONST_FIN = 9999
 
 
 class DireccionesVirtuales:
+    """Asignador de direcciones virtuales. Singleton global: dv."""
 
     def __init__(self):
         self._glob = GLOB_INI
@@ -34,18 +45,22 @@ class DireccionesVirtuales:
         return d, contador + 1
 
     def global_dir(self):
+        """Siguiente direccion para variable global (vars del programa)."""
         d, self._glob = self._siguiente(self._glob, GLOB_FIN, "global")
         return d
 
     def local_dir(self):
+        """Siguiente direccion para param/local/temporal dentro de funcion."""
         d, self._local = self._siguiente(self._local, LOCAL_FIN, "local")
         return d
 
     def temporal_dir(self):
+        """Siguiente direccion temporal en el main (rango 5000+)."""
         d, self._temp = self._siguiente(self._temp, TEMP_FIN, "temporal")
         return d
 
     def constante_dir(self, valor, tipo):
+        """Literal numerico o flotante; reutiliza dir si el valor ya existe."""
         clave = (valor, tipo)
         if clave not in self._tabla_const:
             d, self._const = self._siguiente(self._const, CONST_FIN, "constante")

@@ -1,4 +1,7 @@
-# pila LIFO — expresiones, retornos GOSUB, respaldos ERA
+# Pila LIFO usada en:
+#   - generador_cuadruplos: operandos, operadores, saltos pendientes
+#   - maquina_virtual: IP de retorno, valores de retorno
+#   - memoria_ejecucion: pila de registros de activacion
 
 
 class Stack:

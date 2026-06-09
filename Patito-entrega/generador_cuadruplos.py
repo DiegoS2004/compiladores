@@ -1,4 +1,18 @@
-# generador de cuadruplos — pilas de expresiones + fila de codigo intermedio
+# =============================================================================
+# GENERADOR DE CUADRUPLOS (codigo intermedio)
+# =============================================================================
+# Produce la fila de cuadruplos: (operador, arg1, arg2, resultado)
+#
+# Expresiones — algoritmo con pilas (patron clasico de compiladores):
+#   operandos  → direcciones virtuales pendientes (vars, ctes, temps)
+#   operadores → +, -, *, /, (, etc.
+#   Al encontrar operador de menor precedencia, genera cuadruplo y empuja temporal.
+#
+# Control de flujo — GOTOF/GOTO con pila_saltos (rellenar destino al cerrar bloque).
+# Funciones — PARAM, ERA, GOSUB, RETURN, RETORNO, ENDFUNC.
+#
+# Singleton global: gen
+# =============================================================================
 
 from estructura.stack import Stack
 from estructura.queue import Queue
@@ -12,12 +26,17 @@ PREC_REL = {'>': 1, '<': 1, '!=': 1, '==': 1}
 
 
 class GeneradorCuadruplos:
+    """Construye la fila de cuadruplos mientras el parser recorre el programa."""
+
     def __init__(self):
+        # Pilas para evaluacion de expresiones
         self.operadores = Stack()
         self.operandos = Stack()
         self.tipos = Stack()
+        # Fila FIFO del codigo intermedio que ejecutara la VM
         self.cuadruplos = Queue()
-        self.pila_saltos = Stack()   # indices de cuadruplos GOTOF/GOTO por rellenar
+        # Indices de saltos pendientes de rellenar (si/sino/mientras)
+        self.pila_saltos = Stack()
         self._contador = 0
         self._ciclo_inicio = None
         self._params_llamada = 0
@@ -154,7 +173,10 @@ class GeneradorCuadruplos:
             return True
         return tipo_param == FLOTANTE and tipo_arg == ENTERO
 
+    # --- Asignacion e impresion ---
+
     def asignar(self, direccion_var, tipo_var):
+        """x = expresion ; — vacia pilas y genera (=, valor, _, dir_x)"""
         self.terminar_expresion()
         if self.operandos.is_empty():
             return
@@ -177,7 +199,10 @@ class GeneradorCuadruplos:
     def imprimir_letrero(self, texto):
         self._agregar('PRINT', texto, None, None)
 
+    # --- si / sino (GOTOF + GOTO) ---
+
     def condicion_inicio(self):
+        """Tras si (exp) — genera GOTOF si la condicion es falsa."""
         self.terminar_expresion()
         if self.operandos.is_empty():
             return
@@ -206,8 +231,10 @@ class GeneradorCuadruplos:
         idx = self.pila_saltos.pop()
         self._rellenar(idx, self._contador)
 
+    # --- mientras (GOTOF + GOTO al inicio) ---
+
     def ciclo_inicio(self):
-        # se marca antes de evaluar la condicion (el GOTO del final regresa aqui)
+        """Marca donde regresa el GOTO al final del ciclo."""
         self._ciclo_inicio = self._contador
 
     def ciclo_condicion(self):
@@ -228,7 +255,10 @@ class GeneradorCuadruplos:
             self._rellenar(idx, self._contador)
         self._ciclo_inicio = None
 
+    # --- Llamadas a funcion (PARAM → ERA → GOSUB → RETORNO) ---
+
     def inicio_llamada(self):
+        """Al ver id ( — guarda pilas de expresion para no mezclar con args."""
         self._params_llamada = 0
         self._tipos_llamada = []
         # no mezclar args de la llamada con la expresion que la contiene
@@ -252,12 +282,13 @@ class GeneradorCuadruplos:
         self._tipos_llamada.append(tipo_arg)
 
     def fin_llamada(self, nombre_func, num_esperados, como_expresion=False):
+        """Cierra llamada: valida args, genera ERA+GOSUB, y RETORNO si tiene valor."""
         if self._params_llamada != num_esperados:
             raise ValueError(
                 f"funcion '{nombre_func}' espera {num_esperados} "
                 f"parametros, recibio {self._params_llamada}"
             )
-        func = dir_func.buscar_funcion(nombre_func)
+        func = dir_func.obtener_funcion(nombre_func)
         if func is None:
             raise ValueError(f"funcion '{nombre_func}' no declarada")
 
@@ -299,6 +330,7 @@ class GeneradorCuadruplos:
         self._tipos_llamada = []
 
     def retorna(self, tipo_esperado):
+        """retorna expresion ; — genera RETURN con el valor en la pila de operandos."""
         self.terminar_expresion()
         if self.operandos.is_empty():
             return
@@ -311,6 +343,7 @@ class GeneradorCuadruplos:
         self._agregar('RETURN', valor, None, None)
 
     def endfunc(self):
+        """Fin del cuerpo de una funcion (funciones nula o cierre implicito)."""
         self._agregar('ENDFUNC', None, None, None)
 
     def _rellenar(self, idx, destino):

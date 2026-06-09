@@ -1,8 +1,19 @@
-# parser de patito — gramatica + acciones semanticas (puntos neuralgicos)
+# =============================================================================
+# FASE 2 — PARSER (analisis sintactico + semantico + generacion de cuadruplos)
+# =============================================================================
+# Recorre tokens con PLY (bottom-up). En cada regla gramatical dispara acciones:
+#   - dir_funciones  → registrar variables, funciones, params
+#   - generador_cuadruplos (gen) → crear cuadruplos en puntos neurálgicos
+#
+# Punto neurálgico = momento exacto del parse donde ya tenemos la info necesaria.
+# Ejemplo: al cerrar "x = 1 + 2 ;" ya evaluamos la expresion y generamos el cuadruplo =.
+#
+# compilar_fuente() es la entrada: tokeniza + parsea y deja listo dir_func, gen, dv.
+# =============================================================================
 
 import ply.yacc as yacc
 from patito_lexer import tokens, lexer, clear_lex_errors, get_lex_errors  # noqa: F401
-from dir_funciones import dir_func, SemanticError, reset_dir
+from dir_funciones import dir_func, SemanticError, reiniciar_directorio
 from generador_cuadruplos import gen, reset_gen
 from direcciones_virtuales import reset_dv
 
@@ -24,6 +35,7 @@ def clear_errors():
 
 
 def _sem_error(msg):
+    """Registra error semantico sin detener el parse (sigue buscando mas errores)."""
     _errors.append(msg)
     if not _quiet:
         print(f"[Semantico] {msg}")
@@ -46,20 +58,23 @@ def _gen_try(fn, *args, **kwargs):
         return None
 
 
-def _declarar_vars(nombres, tipo):
+def _registrar_variables(nombres, tipo):
+    """vars x, y : entero; → declara cada nombre en el scope actual."""
     for nombre in nombres:
-        _sem_try(dir_func.nueva_variable, nombre, tipo)
+        _sem_try(dir_func.declarar_variable, nombre, tipo)
 
 
-def _check_var_uso(nombre):
-    if dir_func.buscar_variable(nombre) is None:
+def _verificar_variable_existe(nombre):
+    if dir_func.resolver_variable(nombre) is None:
         _sem_error(f"Variable '{nombre}' no declarada")
 
 
-def _check_func_uso(nombre):
-    if dir_func.buscar_funcion(nombre) is None:
+def _verificar_funcion_existe(nombre):
+    if dir_func.obtener_funcion(nombre) is None:
         _sem_error(f"Funcion '{nombre}' no declarada")
 
+
+# --- Estructura del programa ---
 
 def p_programa(p):
     'programa : programa_header vars funcs inicio_main cuerpo FIN'
@@ -67,12 +82,12 @@ def p_programa(p):
 
 def p_inicio_main(p):
     'inicio_main : INICIO'
-    _sem_try(dir_func.marca_inicio_main, gen.contador)
+    _sem_try(dir_func.marcar_inicio_codigo_main, gen.contador)
 
 
 def p_programa_header(p):
     'programa_header : PROGRAMA ID SEMICOLON'
-    _sem_try(dir_func.inicio_programa, p[2])
+    _sem_try(dir_func.registrar_programa, p[2])
 
 
 def p_vars(p):
@@ -82,7 +97,7 @@ def p_vars(p):
 
 def p_vars_decl(p):
     'vars_decl : ID vars_ids COLON tipo SEMICOLON vars_decl_prime'
-    _declarar_vars([p[1]] + p[2], p[4])
+    _registrar_variables([p[1]] + p[2], p[4])
 
 
 def p_vars_ids(p):
@@ -98,7 +113,7 @@ def p_vars_decl_prime(p):
     '''vars_decl_prime : ID vars_ids COLON tipo SEMICOLON vars_decl_prime
                        | empty'''
     if len(p) == 7:
-        _declarar_vars([p[1]] + p[2], p[4])
+        _registrar_variables([p[1]] + p[2], p[4])
 
 
 def p_tipo(p):
@@ -106,6 +121,8 @@ def p_tipo(p):
             | FLOTANTE'''
     p[0] = 'entero' if p[1] == 'entero' else 'flotante'
 
+
+# --- Declaracion de funciones ---
 
 def p_funcs(p):
     '''funcs : func funcs
@@ -118,19 +135,19 @@ def p_func(p):
 
 def p_func_header(p):
     'func_header : tipo_func ID LPAREN'
-    _sem_try(dir_func.nueva_funcion, p[2], p[1])
+    _sem_try(dir_func.registrar_funcion, p[2], p[1])
 
 
 def p_func_params_fin(p):
     'func_params_fin : RPAREN'
     # primer cuadruplo ejecutable de la funcion (vars locales no generan codigo)
-    _sem_try(dir_func.marca_inicio_funcion, gen.contador)
+    _sem_try(dir_func.marcar_inicio_codigo_funcion, gen.contador)
 
 
 def p_func_footer(p):
     'func_footer :'
     _gen_try(gen.endfunc)
-    _sem_try(dir_func.fin_funcion)
+    _sem_try(dir_func.cerrar_scope_funcion)
 
 
 def p_tipo_func(p):
@@ -143,19 +160,21 @@ def p_params(p):
     '''params : ID COLON tipo params_prime
               | empty'''
     if len(p) == 5:
-        _sem_try(dir_func.nuevo_param, p[1], p[3])
+        _sem_try(dir_func.declarar_parametro, p[1], p[3])
 
 
 def p_params_prime(p):
     '''params_prime : COMMA ID COLON tipo params_prime
                     | empty'''
     if len(p) == 6:
-        _sem_try(dir_func.nuevo_param, p[2], p[4])
+        _sem_try(dir_func.declarar_parametro, p[2], p[4])
 
 
 def p_cuerpo(p):
     'cuerpo : LBRACE estatutos RBRACE'
 
+
+# --- Estatutos (asignacion, llamada, si, mientras, escribe, retorna) ---
 
 def p_estatutos(p):
     '''estatutos : estatuto estatutos
@@ -171,14 +190,14 @@ def p_estatuto(p):
                 | imprime'''
     if len(p) == 5 and p.slice[2].type == 'ASSIGN':
         # asignacion: ID ASSIGN expresion SEMICOLON
-        _check_var_uso(p[1])
-        info = dir_func.buscar_variable(p[1])
+        _verificar_variable_existe(p[1])
+        info = dir_func.resolver_variable(p[1])
         if info:
             _gen_try(gen.asignar, info['direccion'], info['tipo'])
     elif len(p) == 6:
         # llamada como estatuto: call_id ya corrio inicio_llamada
         nombre = p[1]
-        func = dir_func.buscar_funcion(nombre)
+        func = dir_func.obtener_funcion(nombre)
         if func:
             _gen_try(gen.fin_llamada, nombre, func['num_params'])
     elif len(p) == 4 and p.slice[1].type == 'RETORNA':
@@ -186,7 +205,7 @@ def p_estatuto(p):
         if scope is None or scope == 'global':
             _sem_error("retorna solo permitido dentro de funciones")
         else:
-            func = dir_func.buscar_funcion(scope)
+            func = dir_func.obtener_funcion(scope)
             if func:
                 if func['tipo'] == 'nula':
                     _sem_error("funcion nula no puede usar retorna")
@@ -196,7 +215,7 @@ def p_estatuto(p):
 
 def p_call_id(p):
     'call_id : ID'
-    _check_func_uso(p[1])
+    _verificar_funcion_existe(p[1])
     p[0] = p[1]
     _gen_try(gen.inicio_llamada)  # regla aparte para resetear antes de los args
 
@@ -215,6 +234,8 @@ def p_llamada_args_tail(p):
     '''llamada_args_tail : COMMA llamada_arg llamada_args_tail
                          | empty'''
 
+
+# --- Control de flujo: si/sino y mientras ---
 
 def p_condicion(p):
     'condicion : SI LPAREN expresion cond_paren_cierra cuerpo condicion_prime'
@@ -272,6 +293,9 @@ def p_imprime_prime(p):
     '''imprime_prime : COMMA imprime_val imprime_prime
                      | empty'''
 
+
+# --- Expresiones (pilas de operadores/operandos en gen) ---
+# Gramatica con precedencia: expresion > exp (+/-) > termino (*//) > factor
 
 def p_expresion(p):
     'expresion : exp expresion_prime'
@@ -358,22 +382,22 @@ def p_factor(p):
 
 def p_factor_prime_id(p):
     'factor_prime : ID'
-    _check_var_uso(p[1])
-    info = dir_func.buscar_variable(p[1])
+    _verificar_variable_existe(p[1])
+    info = dir_func.resolver_variable(p[1])
     if info:
         _gen_try(gen.push_operando, info['direccion'], info['tipo'])
 
 
 def p_factor_call_head(p):
     'factor_call_head : ID LPAREN'
-    _check_func_uso(p[1])
+    _verificar_funcion_existe(p[1])
     _gen_try(gen.inicio_llamada)
     p[0] = p[1]
 
 
 def p_factor_prime_call(p):
     'factor_prime : factor_call_head llamada_args RPAREN'
-    func = dir_func.buscar_funcion(p[1])
+    func = dir_func.obtener_funcion(p[1])
     if func:
         _gen_try(gen.fin_llamada, p[1], func['num_params'], True)
 
@@ -422,10 +446,17 @@ parser = yacc.yacc(write_tables=False, debug=False)
 
 
 def compilar_fuente(source: str) -> list:
-    """Tokeniza y parsea el programa. Retorna errores (lista vacía = OK)."""
+    """
+    Punto de entrada de compilacion (llamado desde patito.py).
+    Reinicia tablas, tokeniza y parsea. Al terminar:
+      - dir_func tiene programa, funciones y variables
+      - gen.cuadruplos tiene el codigo intermedio
+      - dv tiene el mapa de direcciones
+    Retorna lista de errores (vacia = compilacion exitosa).
+    """
     clear_errors()
     clear_lex_errors()
-    reset_dir()
+    reiniciar_directorio()
     reset_gen()
     reset_dv()
 

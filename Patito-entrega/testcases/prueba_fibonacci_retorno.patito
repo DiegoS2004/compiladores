@@ -11,7 +11,7 @@ entero fib( n : entero )
 }
 inicio
 {
-  x = fib(7);
-  escribe("fib recursivo con retorno 7 =", x);
+  x = fib(20);
+  escribe("fib recursivo con retorno 7 = ", x);
 }
 fin
